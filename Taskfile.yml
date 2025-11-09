@@ -1,6 +1,6 @@
 version: "3"
 tasks:
-  install-nomand-cli:
+  install-nomad-cli:
     desc: Install nomad cli via homebrew
     cmds:
       - brew tap hashicorp/tap
