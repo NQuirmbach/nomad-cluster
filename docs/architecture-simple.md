@@ -14,14 +14,30 @@ Diese vereinfachte Architektur fokussiert sich auf schnelles Setup via GitHub Ac
 - **Subnets**:
   - **Cluster Subnet**: 10.0.10.0/24 (Server + Client Nodes)
 
+#### Load Balancer
+
+- **Type**: Azure Standard Load Balancer
+- **Public IP**: Eine öffentliche IP für alle Services
+- **Frontend Configuration**:
+  - Port 4646 → Nomad UI/API (load-balanced über alle Server)
+  - Port 8500 → Consul UI (load-balanced über alle Server)
+  - Ports 50001-50003 → SSH NAT Rules (ein Port pro Server)
+- **Backend Pool**: Alle Nomad Server Nodes
+- **Health Probes**:
+  - Nomad: HTTP GET `/v1/status/leader` auf Port 4646
+  - Consul: HTTP GET `/v1/status/leader` auf Port 8500
+
 #### Network Security Groups (NSGs)
 
-- **Cluster NSG**:
-  - Erlaubt 4646 (Nomad HTTP API) - öffentlich für Testing
+- **Server NSG**:
+  - Erlaubt 4646 (Nomad HTTP API) - vom Load Balancer
   - Erlaubt 4647-4648 (Nomad RPC, Serf) - intern
-  - Erlaubt 22 (SSH) - öffentlich mit Source IP Restriction (GitHub Actions IPs + deine IP)
-  - Erlaubt 8500 (Consul HTTP API) - öffentlich für Testing
+  - Erlaubt 22 (SSH) - vom Load Balancer (NAT Rules)
+  - Erlaubt 8500 (Consul HTTP API) - vom Load Balancer
   - Erlaubt 8301-8302 (Consul Serf) - intern
+- **Client NSG**:
+  - Erlaubt alle Ports - intern (für Nomad Jobs)
+  - Erlaubt 22 (SSH) - intern für Management
 
 ### 2. Compute-Ressourcen
 
@@ -31,7 +47,10 @@ Diese vereinfachte Architektur fokussiert sich auf schnelles Setup via GitHub Ac
 - **Anzahl**: 3 Nodes (für Consensus)
 - **OS**: Ubuntu 22.04 LTS
 - **Managed Disks**: Standard SSD (E10: 128 GB)
-- **Public IP**: Ja (für direkten Zugriff)
+- **Networking**: 
+  - Private IPs nur (10.0.10.x)
+  - Zugriff via Load Balancer
+  - SSH via NAT Rules (Ports 50001-50003)
 
 #### Nomad Client Nodes
 
@@ -71,37 +90,47 @@ Diese vereinfachte Architektur fokussiert sich auf schnelles Setup via GitHub Ac
 ## Architektur-Diagramm (Simplified)
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                  Azure Region                        │
+┌───────────────────────────────────────────────────────┐
+│                  Azure Subscription                   │
 │                                                       │
-│  ┌────────────────────────────────────────────────┐ │
-│  │         Virtual Network (10.0.0.0/16)          │ │
+│  ┌─────────────────────────────────┐                 │
+│  │      Load Balancer (Public)     │                 │
+│  │  ┌──────────────────────────┐   │                 │
+│  │  │ Public IP: x.x.x.x       │   │                 │
+│  │  │ - Port 4646 → Nomad UI   │   │                 │
+│  │  │ - Port 8500 → Consul UI  │   │                 │
+│  │  │ - Port 50001-3 → SSH NAT │   │                 │
+│  │  └──────────────────────────┘   │                 │
+│  └──────────────┬──────────────────┘                 │
+│                 │                                     │
+│  ┌──────────────▼──────────────────────────────────┐ │
+│  │         Virtual Network (10.0.0.0/16)           │ │
 │  │                                                 │ │
 │  │  ┌──────────────────────────────────────────┐  │ │
-│  │  │    Cluster Subnet (10.0.10.0/24)         │  │ │
-│  │  │                                           │  │ │
-│  │  │  ┌──────────────┐ ┌──────────────┐       │  │ │
-│  │  │  │ Nomad Server │ │ Nomad Server │       │  │ │
-│  │  │  │  + Consul 1  │ │  + Consul 2  │       │  │ │
-│  │  │  │              │ │              │       │  │ │
-│  │  │  └──────────────┘ └──────────────┘       │  │ │
-│  │  │         ┌──────────────┐                 │  │ │
-│  │  │         │ Nomad Server │                 │  │ │
-│  │  │         │  + Consul 3  │                 │  │ │
-│  │  │         │              │                 │  │ │
-│  │  │         └──────────────┘                 │  │ │
-│  │  │               ↑                           │  │ │
-│  │  │               │ Internal Communication    │  │ │
-│  │  │          ┌────┴────┐                     │  │ │
-│  │  │          │         │                     │  │ │
-│  │  │  ┌───────┴──────┐                       │  │ │
-│  │  │  │   VMSS      │                       │  │ │
-│  │  │  │  Clients    │                       │  │ │
-│  │  │  │ (Auto-Scale)│                       │  │ │
-│  │  │  └────────────┘                       │  │ │
-│  │  │                                           │  │ │
-│  │  └───────────────────────────────────────────┘  │ │
-│  └──────────────────────────────────────────────────┘ │
+│  │  │    Cluster Subnet (10.0.10.0/24)        │  │ │
+│  │  │                                          │  │ │
+│  │  │  ┌──────────────┐ ┌──────────────┐      │  │ │
+│  │  │  │ Nomad Server │ │ Nomad Server │      │  │ │
+│  │  │  │  + Consul 1  │ │  + Consul 2  │      │  │ │
+│  │  │  │ Private IP   │ │ Private IP   │      │  │ │
+│  │  │  └──────────────┘ └──────────────┘      │  │ │
+│  │  │         ┌──────────────┐                │  │ │
+│  │  │         │ Nomad Server │                │  │ │
+│  │  │         │  + Consul 3  │                │  │ │
+│  │  │         │ Private IP   │                │  │ │
+│  │  │         └──────────────┘                │  │ │
+│  │  │               ↑                          │  │ │
+│  │  │               │ Internal Communication   │  │ │
+│  │  │          ┌────┴────┐                    │  │ │
+│  │  │          │         │                    │  │ │
+│  │  │  ┌───────┴──────┐                      │  │ │
+│  │  │  │   VMSS       │                      │  │ │
+│  │  │  │  Clients     │                      │  │ │
+│  │  │  │ (Auto-Scale) │                      │  │ │
+│  │  │  └──────────────┘                      │  │ │
+│  │  │                                          │  │ │
+│  │  └──────────────────────────────────────────┘  │ │
+│  └─────────────────────────────────────────────────┘ │
 │                                                       │
 │  ┌──────────────┐  ┌────────────────┐  ┌─────────┐  │
 │  │ Storage      │  │ Resource Group │  │Key Vault│  │
@@ -180,13 +209,13 @@ ansible/
 9. Run Ansible Playbooks
 10. Output Cluster Info
 
-**Secrets benötigt**:
+**Secrets benötigt** (pro Environment):
 
-- `AZURE_CLIENT_ID`
-- `AZURE_CLIENT_SECRET`
-- `AZURE_TENANT_ID`
-- `AZURE_SUBSCRIPTION_ID`
-- `SSH_PRIVATE_KEY`
+- `AZURE_CLIENT_ID` - Managed Identity Client ID
+- `AZURE_TENANT_ID` - Azure Tenant ID
+- `AZURE_SUBSCRIPTION_ID` - Azure Subscription ID
+
+**Authentifizierung**: OIDC (Federated Identity) - keine Passwörter/Secrets nötig!
 
 ### Workflow 2: App Deployment
 
@@ -218,12 +247,15 @@ ansible/
 
 - **3x Nomad Server** (Standard_B2s): ~€90
 - **2-4x Nomad Client** (Standard_B2ms via VMSS): ~€60-120
-- **Networking** (VNet, NSG, Public IPs): ~€15
+- **Load Balancer** (Standard): ~€20
+- **Networking** (VNet, NSG, 1 Public IP): ~€5
 - **Storage** (Standard SSD): ~€25
 - **Key Vault**: ~€5
 - **Log Analytics Workspace**: ~€10
 - **Terraform State Storage**: ~€2
-- **Gesamt**: **~€210-270/Monat**
+- **Gesamt**: **~€200-260/Monat**
+
+**Kosteneinsparung durch Load Balancer**: ~€10/Monat (weniger Public IPs)
 
 **Hinweis**: Bei Nicht-Nutzung können VMs gestoppt werden (nur Storage-Kosten ~€17/Monat)
 

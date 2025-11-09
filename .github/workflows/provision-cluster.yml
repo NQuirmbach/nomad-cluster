@@ -1,4 +1,4 @@
-name: Provision Nomad Cluster
+name: Provision Nomad Cluster - ${{ github.event.inputs.environment || 'dev' }} - ${{ github.event.inputs.action || 'apply' }}
 
 on:
   workflow_dispatch:
@@ -12,6 +12,7 @@ on:
           - dev
           - stg
           - prd
+
       action:
         description: "Action to perform"
         required: true
