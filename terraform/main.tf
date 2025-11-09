@@ -15,13 +15,9 @@ locals {
   env_prefix = "${var.prefix}-${local.workspace}"
 }
 
-# Resource Group
-resource "azurerm_resource_group" "nomad" {
-  name     = "rg-nomad-cluster-${local.workspace}"
-  location = var.location
-  tags     = merge(var.tags, {
-    Workspace = local.workspace
-  })
+# Resource Group (created by setup script)
+data "azurerm_resource_group" "nomad" {
+  name = "rg-nomad-cluster-${local.workspace}"
 }
 
 # Network Module
@@ -29,8 +25,8 @@ module "network" {
   source = "./modules/network"
   
   prefix              = local.env_prefix
-  location            = var.location
-  resource_group_name = azurerm_resource_group.nomad.name
+  location            = data.azurerm_resource_group.nomad.location
+  resource_group_name = data.azurerm_resource_group.nomad.name
   allowed_ssh_ips     = var.allowed_ssh_ips
   tags                = merge(var.tags, { Workspace = local.workspace })
 }
@@ -40,8 +36,8 @@ module "services" {
   source = "./modules/services"
   
   prefix                      = local.env_prefix
-  location                    = var.location
-  resource_group_name         = azurerm_resource_group.nomad.name
+  location                    = data.azurerm_resource_group.nomad.location
+  resource_group_name         = data.azurerm_resource_group.nomad.name
   enable_github_actions_rbac  = var.enable_github_actions_rbac
   tags                        = merge(var.tags, { Workspace = local.workspace })
 }
@@ -63,8 +59,8 @@ module "compute" {
   source = "./modules/compute"
   
   prefix              = local.env_prefix
-  location            = var.location
-  resource_group_name = azurerm_resource_group.nomad.name
+  location            = data.azurerm_resource_group.nomad.location
+  resource_group_name = data.azurerm_resource_group.nomad.name
   subnet_id           = module.network.cluster_subnet_id
   server_nsg_id       = module.network.server_nsg_id
   client_nsg_id       = module.network.client_nsg_id
