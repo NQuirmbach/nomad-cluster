@@ -1,4 +1,6 @@
-name: Provision Nomad Cluster - ${{ github.event.inputs.environment || 'dev' }} - ${{ github.event.inputs.action || 'apply' }}
+name: Provision Nomad Cluster
+
+run-name: Provision ${{ github.event.inputs.environment || 'dev' }} - ${{ github.event.inputs.action || 'apply' }}
 
 on:
   workflow_dispatch:
