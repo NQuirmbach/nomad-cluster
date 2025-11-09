@@ -19,6 +19,7 @@ on:
         type: choice
         options:
           - apply
+          - refresh
           - destroy
   push:
     branches: [main]
@@ -73,11 +74,19 @@ jobs:
         run: terraform init
 
       - name: Terraform Plan/Apply
-        if: github.event.inputs.action != 'destroy'
+        if: github.event.inputs.action == 'apply'
         working-directory: ./terraform
         run: |
           terraform plan -var-file="environments/$TF_WORKSPACE/terraform.tfvars" -out=tfplan
           terraform apply -auto-approve tfplan
+
+      - name: Terraform Refresh
+        if: github.event.inputs.action == 'refresh'
+        working-directory: ./terraform
+        run: |
+          terraform refresh -var-file="environments/$TF_WORKSPACE/terraform.tfvars"
+          echo "## State Refreshed!" >> $GITHUB_STEP_SUMMARY
+          echo "Terraform state has been refreshed with the real-world infrastructure." >> $GITHUB_STEP_SUMMARY
 
       - name: Terraform Destroy
         if: github.event.inputs.action == 'destroy'
@@ -86,13 +95,13 @@ jobs:
           terraform destroy -var-file="environments/$TF_WORKSPACE/terraform.tfvars" -auto-approve
 
       - name: Generate Inventory
-        if: github.event.inputs.action != 'destroy'
+        if: github.event.inputs.action == 'apply'
         working-directory: ./terraform
         run: |
           terraform output -raw ansible_inventory > ../ansible/inventory.ini
 
       - name: Add VMSS Instances to Inventory
-        if: github.event.inputs.action != 'destroy'
+        if: github.event.inputs.action == 'apply'
         working-directory: ./terraform
         run: |
           RESOURCE_GROUP=$(terraform output -raw resource_group_name)
@@ -110,14 +119,14 @@ jobs:
           cat ../ansible/inventory.ini
 
       - name: Extract SSH Key
-        if: github.event.inputs.action != 'destroy'
+        if: github.event.inputs.action == 'apply'
         working-directory: ./terraform
         run: |
           terraform output -raw ssh_private_key > ssh_key.pem
           chmod 600 ssh_key.pem
 
       - name: Upload Artifacts
-        if: github.event.inputs.action != 'destroy'
+        if: github.event.inputs.action == 'apply'
         uses: actions/upload-artifact@v4
         with:
           name: cluster-config
@@ -127,7 +136,7 @@ jobs:
           retention-days: 1
 
       - name: Output Provision Summary
-        if: github.event.inputs.action != 'destroy'
+        if: github.event.inputs.action == 'apply'
         working-directory: ./terraform
         run: |
           SERVER_IP=$(terraform output -json nomad_server_public_ips | jq -r '.[0]')
@@ -139,7 +148,7 @@ jobs:
     name: Configure Cluster
     runs-on: ubuntu-latest
     needs: provision
-    if: github.event.inputs.action != 'destroy'
+    if: github.event.inputs.action == 'apply'
     environment: ${{ github.event.inputs.environment || 'dev' }}
 
     permissions:

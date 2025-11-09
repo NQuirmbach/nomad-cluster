@@ -240,6 +240,356 @@ nomad job status web-app
 | **Observability** | ⚠️ Basis | ✅ Umfangreich | K8s deutlich besser |
 | **Multi-Tenancy** | ⚠️ Namespaces | ✅ Namespaces+RBAC | K8s besser |
 
+### Erweiterbarkeit & CRDs
+
+**Custom Resource Definitions (CRDs) - Kubernetes Killer-Feature:**
+
+Kubernetes erlaubt es, eigene APIs und Ressourcentypen zu definieren:
+
+```yaml
+# Beispiel: Custom Resource
+apiVersion: apps.example.com/v1
+kind: Database
+metadata:
+  name: my-postgres
+spec:
+  version: "14"
+  storage: 100Gi
+  replicas: 3
+```
+
+**Kubernetes CRDs:**
+- ✅ Native API-Erweiterung
+- ✅ Eigene Controller (Operator Pattern)
+- ✅ Deklarative Custom Resources
+- ✅ Versionierung & Validation
+- ✅ Riesiges Ecosystem (100+ Operators)
+
+**Beispiel-Operators:**
+- Prometheus Operator (Monitoring)
+- Cert-Manager (TLS-Zertifikate)
+- Postgres Operator (Datenbanken)
+- Istio Operator (Service Mesh)
+- Argo CD (GitOps)
+
+**Nomad-Äquivalent:**
+- ❌ Keine CRDs oder vergleichbare Erweiterbarkeit
+- ⚠️ Job-Templates mit Variablen (limitiert)
+- ⚠️ Plugins für Task-Treiber (komplexer)
+- ⚠️ Nomad Pack (Template-System, Alpha-Stadium)
+
+**Impact:**
+- K8s-Ecosystem baut massiv auf CRDs auf
+- Nomad fehlt diese Erweiterbarkeit → Geringeres Ecosystem
+- **Für Enterprises**: CRDs ermöglichen standardisierte Plattformen
+
+### Was Nomad besser macht als Kubernetes
+
+**Nomads Design-Philosophie: "Einfachheit über Features"**
+
+#### 1. Multi-Workload Support (Native)
+
+**Problem bei Kubernetes:**
+- Primär für Container designed
+- VMs benötigen KubeVirt (komplex)
+- Binaries benötigen Workarounds
+- Java-Apps ohne Container aufwändig
+
+**Nomad-Lösung:**
+
+```hcl
+# Docker-Container
+task "web" {
+  driver = "docker"
+  config { image = "nginx" }
+}
+
+# Java-Anwendung (kein Container)
+task "batch" {
+  driver = "java"
+  config { jar_path = "app.jar" }
+}
+
+# VM (über QEMU)
+task "legacy" {
+  driver = "qemu"
+  config { image_path = "vm.qcow2" }
+}
+
+# Binary direkt
+task "script" {
+  driver = "exec"
+  config { command = "/usr/bin/python3" }
+}
+```
+
+**Vorteil:** Legacy-Modernisierung ohne vollständige Containerisierung
+
+#### 2. Operationale Einfachheit
+
+**Problem bei Kubernetes:**
+- Komplexes Troubleshooting (etcd, API-Server, Scheduler, Controller)
+- Upgrade-Komplexität (K8s Minor-Versions alle 3 Monate)
+- Viele bewegliche Teile
+
+**Nomad-Lösung:**
+- Single Binary → Einfaches Troubleshooting
+- Weniger Breaking Changes
+- Upgrades: Binary austauschen, neu starten
+
+**Beispiel - Debugging:**
+
+```bash
+# Nomad: Ein Prozess zum Debuggen
+ps aux | grep nomad
+tail -f /var/log/nomad.log
+
+# Kubernetes: Mehrere Komponenten
+kubectl logs -n kube-system kube-apiserver-...
+kubectl logs -n kube-system kube-scheduler-...
+kubectl logs -n kube-system kube-controller-manager-...
+journalctl -u kubelet
+# + etcd separat debuggen
+```
+
+#### 3. Ressourcen-Effizienz
+
+**Control Plane Ressourcen:**
+
+| Setup | Nomad | Kubernetes |
+|-------|-------|------------|
+| **CPU** | ~200m pro Server | ~2000m (2 Cores) |
+| **Memory** | ~512 MB | ~4 GB |
+| **Disk I/O** | Niedrig | Mittel-Hoch (etcd) |
+
+**Für Edge/IoT**: Nomad läuft auf deutlich kleineren Maschinen
+
+#### 4. Schnelleres Job-Scheduling
+
+**Scheduling Performance:**
+- Nomad: ~1000 Placements/Sekunde
+- Kubernetes: ~100-300 Pods/Sekunde
+
+**Use Case:** Batch-Processing, Data-Pipelines, kurzlebige Jobs
+
+#### 5. Flexible Datacenter-Federation
+
+**Nomad WAN Federation:**
+- Native Multi-Region ohne zusätzliche Tools
+- Jobs über Regionen hinweg orchestrieren
+- Einfachere Topologie als K8s-Federation
+
+**Kubernetes:**
+- Benötigt zusätzliche Tools (Rancher, Submariner)
+- Komplexe Netzwerk-Konfiguration
+- Höherer Betriebs-Overhead
+
+### Was Kubernetes deutlich besser macht
+
+#### 1. Deklaratives Modell & Reconciliation
+
+**Kubernetes Operator Pattern:**
+- Kontinuierliche Reconciliation Loop
+- Automatische Drift-Korrektur
+- Self-Healing über Desired State
+
+**Nomad:**
+- Teilweise deklarativ
+- Weniger ausgereift bei komplexen State-Übergängen
+
+#### 2. Networking & Service Mesh
+
+**Kubernetes:**
+- Ausgereiftes CNI-Ecosystem (Calico, Cilium, etc.)
+- Native Network Policies
+- Service Mesh Integration (Istio, Linkerd)
+- Ingress Controller Ecosystem
+
+**Nomad:**
+- Basis-Networking (Bridge, Host)
+- Consul Connect für Service Mesh (zusätzliche Komponente)
+- Weniger Feature-reich
+
+#### 3. Storage Orchestration
+
+**Kubernetes:**
+- StorageClasses für dynamische Provisioning
+- Volume Snapshots
+- CSI-Treiber-Ecosystem
+- StatefulSets mit ordered deployment
+
+**Nomad:**
+- Host Volumes (statisch)
+- CSI-Support (begrenzt)
+- Keine native Snapshot-Funktionalität
+
+#### 4. Observability-Integration
+
+**Kubernetes Vorteile:**
+
+```
+Native Integration:
+├── Prometheus (Metrics)
+├── Fluentd/Loki (Logs)  
+├── Jaeger (Tracing)
+├── OpenTelemetry
+└── Service Mesh Telemetry
+```
+
+**Nomad:**
+- Prometheus-Integration (manuell)
+- Logging per Syslog
+- Tracing: externe Integration notwendig
+
+#### 5. Platform Engineering
+
+**Kubernetes als Plattform:**
+- CRDs für Abstraktion (Developer Self-Service)
+- Operator Framework für Custom Automation
+- Backstage/Port für Internal Developer Platforms
+
+**Nomad:**
+- Limitierte Abstraktion-Möglichkeiten
+- Kein etabliertes Platform-Engineering-Ecosystem
+
+### Community & Ecosystem-Vergleich
+
+#### Kubernetes Community
+
+**Zahlen (2024):**
+- **Contributors**: >3000 aktive
+- **GitHub Stars**: >110.000
+- **Meetups**: Global >500, DACH >50
+- **Konferenzen**: KubeCon (10.000+ Attendees)
+- **CNCF Projects**: 150+ integrierte Tools
+- **Stack Overflow**: >100.000 Fragen
+
+**Community-Aktivität:**
+- Täglich neue Releases/Tools
+- Aktive Special Interest Groups (SIGs)
+- Vendor-neutral (CNCF)
+
+#### Nomad Community
+
+**Zahlen (2024):**
+- **Contributors**: ~200 aktive
+- **GitHub Stars**: ~14.000
+- **Meetups**: Global <20, DACH ~2
+- **Konferenzen**: HashiConf (Nomad = Teilbereich)
+- **Ecosystem**: ~20-30 Plugins/Tools
+- **Stack Overflow**: ~1.500 Fragen
+
+**Community-Aktivität:**
+- Weniger frequent Releases
+- Primär HashiCorp-getrieben
+- Kleinere aber fokussierte Community
+
+#### Ecosystem-Größe
+
+**CNCF Landscape (K8s-relevant): ~1.000 Tools**
+
+Kategorien:
+- Container Registries: 20+
+- CI/CD: 50+
+- Monitoring: 40+
+- Security: 80+
+- Service Mesh: 10+
+- Storage: 30+
+
+**Nomad Ecosystem: ~30 Tools**
+
+- Task Drivers: 10
+- Deployment Tools: 5
+- Monitoring Plugins: 5
+- CI/CD Integration: Wenige
+
+**Impact:**
+- K8s: Lösung für fast jedes Problem verfügbar
+- Nomad: Oft Custom-Entwicklung notwendig
+
+### Limitations beider Systeme
+
+#### Kubernetes Limitations
+
+**1. Komplexität**
+- Steile Lernkurve (3-6 Monate bis produktiv)
+- Schwieriges Troubleshooting
+- Upgrade-Risiken bei Breaking Changes
+
+**2. Ressourcen-Overhead**
+- Control Plane benötigt signifikante Ressourcen
+- etcd als Single Point of Complexity
+- Nicht geeignet für Edge/IoT (<2GB RAM)
+
+**3. Über-Engineering für kleine Teams**
+- Zu viele Features für einfache Use Cases
+- Overhead ohne entsprechenden Nutzen bei <5 Services
+
+**4. Multi-Tenancy Herausforderungen**
+- "Harte" Multi-Tenancy schwierig
+- Namespace-Isolation nicht vollständig
+- Shared Control Plane Risiken
+
+**5. Stateful Workloads**
+- StatefulSets komplex
+- Backup/Restore nicht trivial
+- Storage-Orchestration fehleranfällig
+
+#### Nomad Limitations
+
+**1. Feature-Gaps**
+- Kein natives Secrets-Management (Vault benötigt)
+- Eingeschränkte Network Policies
+- Kein Ingress-Controller-Konzept
+
+**2. Ecosystem-Limitierung**
+- Wenige Third-Party-Tools
+- Kaum fertige Lösungen (Operators, etc.)
+- Mehr Custom-Development notwendig
+
+**3. Erweiterbarkeit**
+- Keine CRDs oder ähnliches
+- Schwierig, eigene Abstraktionen zu bauen
+- Limitiertes Plugin-System
+
+**4. Enterprise-Features**
+- Viele Features nur in Enterprise-Version
+- Audit-Logging nicht in OSS
+- SSO-Integration Enterprise-only
+
+**5. Markt-Position**
+- Schwierige Rekrutierung
+- Weniger Training-Material
+- Geringere Vendor-Unterstützung
+
+**6. GitOps-Maturity**
+- Kein ArgoCD/Flux-Äquivalent
+- Levant/Nomad Pack noch unreif
+- Mehr manuelle Prozesse
+
+**7. Observability**
+- Keine native Metrics-Aggregation
+- Logging basic
+- Distributed Tracing extern
+
+#### Vergleich: Welche Limitation wiegt schwerer?
+
+| Limitation | Nomad | Kubernetes | Kritikalität |
+|------------|-------|------------|--------------|
+| **Lernkurve** | ✅ | ❌ | Hoch (Onboarding) |
+| **Ressourcen-Overhead** | ✅ | ❌ | Mittel (Kosten) |
+| **Feature-Vollständigkeit** | ❌ | ✅ | Hoch (Enterprise) |
+| **Ecosystem** | ❌ | ✅ | Sehr Hoch |
+| **Community-Support** | ❌ | ✅ | Hoch |
+| **Erweiterbarkeit** | ❌ | ✅ | Sehr Hoch |
+| **Multi-Workload** | ✅ | ❌ | Mittel (Nische) |
+| **Operationale Einfachheit** | ✅ | ❌ | Mittel |
+
+**Fazit Limitations:**
+- K8s-Limitations betreffen primär **Einstieg und Betrieb**
+- Nomad-Limitations betreffen **Features und Zukunftssicherheit**
+- Für Enterprises wiegen Nomad-Limitations schwerer
+
 ### Lernkurve & Betrieb
 
 **Time to Production:**
@@ -599,23 +949,134 @@ GESAMT AKS:                            ~€1.680/Monat
 
 ## Schlussfolgerung
 
+### Kernerkenntnisse aus der Evaluierung
+
+**Nomads Stärken sind real:**
+- ✅ Deutlich einfacher zu lernen und zu betreiben
+- ✅ Exzellenter Multi-Workload-Support (Container + VMs + Binaries)
+- ✅ Geringerer Ressourcen-Overhead
+- ✅ Schnelleres Scheduling (Batch-Jobs)
+- ✅ Native Multi-Region-Federation
+
+**Aber: Kritische Schwächen überwiegen für Enterprise:**
+- ❌ **Keine CRDs** → Limitierte Plattform-Abstraktion
+- ❌ **Kleines Ecosystem** → Mehr Custom-Development
+- ❌ **Schwache Community** in DACH → Rekrutierungsproblem
+- ❌ **Fehlende Managed Services** in EU → Höhere Betriebskosten
+- ❌ **GitOps-Immaturity** → Weniger Automatisierung
+
+**Kubernetes-Vorteile sind entscheidend:**
+- ✅ CRDs & Operator Pattern → Enterprise-Plattformen
+- ✅ Riesiges Ecosystem → Fertige Lösungen
+- ✅ Managed Services → Niedrigere TCO
+- ✅ Community & Marktposition → Langfristig sicher
+- ✅ Talent-Verfügbarkeit → Einfache Skalierung
+
 ### Für unsere Firma
 
-1. ✅ **Kubernetes bleibt Standard**
-2. ⚠️ **Nomad als Nischen-Option**
+1. ✅ **Kubernetes bleibt Haupt-Standard**
+   - Primäre Marketing-Botschaft
+   - Hauptfokus für Skill-Entwicklung
+   - Default für 90% der Projekte
+
+2. ⚠️ **Nomad als taktische Nischen-Option**
+   - Für spezifische Use Cases (Legacy, Edge, Batch)
+   - Differenzierungsmerkmal ("Wir kennen Alternativen")
+   - Nicht aktiv vermarkten, aber verfügbar
+
 3. ✅ **Skill-Aufbau fokussiert**
-4. ⚠️ **Marketing: K8s-First**
+   - 1-2 Nomad-Spezialisten (die auch K8s können)
+   - Team-weite K8s-Kompetenz weiter ausbauen
+   - CRD & Operator-Entwicklung als Differentiator
+
+4. ⚠️ **Marketing: "Technologie-Agnostisch, K8s-Kompetent"**
+   - "Kubernetes-First, aber nicht Kubernetes-Only"
+   - Nomad für die richtigen Probleme
 
 ### Für unsere Kunden
 
 **Default-Empfehlung:** Managed Kubernetes (AKS/EKS/GKE)
 
+**Begründung:**
+- Industry Standard mit langfristiger Zukunftssicherheit
+- Riesiges Ecosystem für alle Anforderungen
+- Managed Services senken Betriebskosten
+- Einfache Rekrutierung von Talenten
+- CRDs ermöglichen Platform Engineering
+
 **Nomad-Empfehlung nur wenn:**
-- Startup mit <20 Mitarbeitern
-- Legacy-Mixed-Workloads
-- Edge/IoT-Anforderungen
-- Explizit Multi-Cloud ohne K8s
-- Keine Compliance-Anforderungen
+
+1. **Legacy-Modernisierung** mit Mixed Workloads
+   - Schrittweise Container-Einführung
+   - VMs parallel zu Container
+   - Zeitdruck für MVP
+
+2. **Startup-Phase** (<20 Mitarbeiter)
+   - Fokus auf Time-to-Market
+   - Kleines Team ohne K8s-Expertise
+   - MVP-Strategie mit späterer Migration
+
+3. **Edge/IoT-Computing**
+   - Ressourcen-limitierte Umgebungen
+   - Viele kleine Deployments
+   - Offline-Fähigkeit wichtig
+
+4. **Batch/Data-Processing-Fokus**
+   - Primär kurzlebige Jobs
+   - Wenig Microservices
+   - Scheduling-Performance wichtig
+
+5. **Multi-Cloud-Anforderung ohne K8s-Wissen**
+   - Portabilität absolut kritisch
+   - Team hat keine K8s-Expertise
+   - Einfachheit wichtiger als Features
+
+**Explizite Ausschluss-Kriterien für Nomad:**
+- ❌ Regulierte Industrien (Banking, Healthcare, Public Sector)
+- ❌ Große Enterprise (>100 Entwickler)
+- ❌ Cloud-Native Microservices-Architektur
+- ❌ Anforderung an Platform Engineering
+- ❌ Compliance-kritische Anforderungen (BSI C5, SOC2)
+
+---
+
+## TL;DR - Die wichtigsten Erkenntnisse
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  NOMAD vs. KUBERNETES - KERNERKENNTNIS                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ✅ Nomad ist EINFACHER, ABER...                                │
+│  ❌ Kubernetes ist VOLLSTÄNDIGER und ZUKUNFTSSICHERER           │
+│                                                                  │
+│  EMPFEHLUNG für unsere Firma:                                   │
+│  → Kubernetes als Haupt-Standard (90% der Projekte)            │
+│  → Nomad für spezifische Nischen (10% der Projekte)            │
+│                                                                  │
+│  KRITISCHE FAKTOREN gegen Nomad in Enterprise:                  │
+│  1. Keine CRDs → Limitiertes Platform Engineering              │
+│  2. Kleines Ecosystem → Mehr Custom-Development                 │
+│  3. Schwache DACH-Community → Rekrutierungsproblem             │
+│  4. Keine EU Managed Services → Höhere Betriebskosten          │
+│  5. Geringere Marktakzeptanz → Risiko für Kunden              │
+│                                                                  │
+│  WANN MACHT NOMAD SINN:                                         │
+│  • Legacy-Modernisierung (Mixed Workloads)                      │
+│  • Startups in MVP-Phase (<20 Entwickler)                      │
+│  • Edge/IoT mit Ressourcen-Limitierung                         │
+│  • Batch-Processing (Scheduling-Performance)                    │
+│                                                                  │
+│  KOSTEN-REALITÄT:                                               │
+│  Nomad (Self-Managed) ist 20-37% TEURER als managed K8s        │
+│  durch höheren Personal- und Betriebsaufwand                    │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Ein-Satz-Fazit
+
+**"Nomad löst reale Probleme (Einfachheit, Multi-Workload), aber für Enterprise-Beratung überwiegen die Nachteile (Ecosystem, Community, CRDs, TCO) – Kubernetes bleibt der Standard, Nomad ist eine taktische Nischen-Alternative."**
 
 ---
 
