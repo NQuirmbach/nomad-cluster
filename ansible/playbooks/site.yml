@@ -1,0 +1,13 @@
+---
+# Master Playbook für Nomad Cluster Setup
+- name: Common Setup für alle Nodes
+  import_playbook: common.yml
+
+- name: Consul Server Setup
+  import_playbook: consul.yml
+
+- name: Nomad Server Setup
+  import_playbook: nomad-server.yml
+
+- name: Nomad Client Setup
+  import_playbook: nomad-client.yml

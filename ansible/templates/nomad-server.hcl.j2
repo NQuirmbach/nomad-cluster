@@ -1,0 +1,52 @@
+datacenter = "{{ datacenter }}"
+data_dir = "/opt/nomad/data"
+
+server {
+  enabled = true
+  bootstrap_expect = {{ groups['nomad_servers'] | length }}
+  server_join {
+    retry_join = [
+      {% for ip in server_ips %}
+      "{{ ip }}"{% if not loop.last %},{% endif %}
+      {% endfor %}
+    ]
+    retry_max = 5
+    retry_interval = "15s"
+  }
+}
+
+client {
+  enabled = false
+}
+
+consul {
+  address = "127.0.0.1:8500"
+  server_service_name = "nomad"
+  client_service_name = "nomad-client"
+  auto_advertise = true
+  server_auto_join = true
+  client_auto_join = true
+}
+
+telemetry {
+  collection_interval = "1s"
+  disable_hostname = true
+  prometheus_metrics = true
+  publish_allocation_metrics = true
+  publish_node_metrics = true
+}
+
+log_level = "INFO"
+enable_syslog = true
+
+addresses {
+  http = "0.0.0.0"
+  rpc  = "0.0.0.0"
+  serf = "0.0.0.0"
+}
+
+ports {
+  http = 4646
+  rpc  = 4647
+  serf = 4648
+}

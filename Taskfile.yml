@@ -30,8 +30,8 @@ tasks:
       TIMESTAMP:
         sh: date +%Y%m%d%H%M%S
     cmds:
-      - cd src && task build IMAGE_VERSION={{.TIMESTAMP}}
-      - nomad job run -var IMAGE_VERSION={{.TIMESTAMP}} ops/nomad/web.nomad.hcl
+      - cd app && task build IMAGE_VERSION={{.TIMESTAMP}}
+      - nomad job run -var IMAGE_VERSION={{.TIMESTAMP}} jobs/web.nomad.hcl
 
   default:
     desc: List all available tasks

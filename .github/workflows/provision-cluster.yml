@@ -1,0 +1,99 @@
+name: Provision Nomad Cluster
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        default: 'apply'
+        type: choice
+        options:
+          - apply
+          - destroy
+  push:
+    branches: [main]
+    paths: ['terraform/**', 'ansible/**']
+
+jobs:
+  provision:
+    name: Provision Infrastructure
+    runs-on: ubuntu-latest
+    environment: azure-dev
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.5.0'
+          
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          
+      - name: Terraform Init
+        working-directory: ./terraform
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=${{ secrets.TF_STATE_RG }}" \
+            -backend-config="storage_account_name=${{ secrets.TF_STATE_SA }}" \
+            -backend-config="container_name=tfstate" \
+            -backend-config="key=nomad.tfstate"
+            
+      - name: Terraform Plan/Apply
+        if: github.event.inputs.action != 'destroy'
+        working-directory: ./terraform
+        run: |
+          terraform plan -var="ssh_public_key=${{ secrets.SSH_PUBLIC_KEY }}" -out=tfplan
+          terraform apply -auto-approve tfplan
+          
+      - name: Terraform Destroy
+        if: github.event.inputs.action == 'destroy'
+        working-directory: ./terraform
+        run: |
+          terraform destroy -auto-approve -var="ssh_public_key=${{ secrets.SSH_PUBLIC_KEY }}"
+          
+      - name: Generate Inventory
+        if: github.event.inputs.action != 'destroy'
+        working-directory: ./terraform
+        run: terraform output -raw ansible_inventory > ../ansible/inventory.ini
+          
+      - name: Setup Ansible
+        if: github.event.inputs.action != 'destroy'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          
+      - name: Install Ansible
+        if: github.event.inputs.action != 'destroy'
+        run: pip install ansible==2.15.0
+        
+      - name: Setup SSH
+        if: github.event.inputs.action != 'destroy'
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          
+      - name: Wait for VMs
+        if: github.event.inputs.action != 'destroy'
+        run: sleep 60
+        
+      - name: Run Ansible Playbooks
+        if: github.event.inputs.action != 'destroy'
+        working-directory: ./ansible
+        run: |
+          export ANSIBLE_HOST_KEY_CHECKING=False
+          ansible-playbook -i inventory.ini playbooks/site.yml
+          
+      - name: Output Cluster Info
+        if: github.event.inputs.action != 'destroy'
+        working-directory: ./terraform
+        run: |
+          SERVER_IP=$(terraform output -raw nomad_server_public_ips | jq -r '.[0]')
+          echo "## Nomad Cluster Ready!" >> $GITHUB_STEP_SUMMARY
+          echo "- Nomad UI: http://$SERVER_IP:4646/ui" >> $GITHUB_STEP_SUMMARY
+          echo "- Consul UI: http://$SERVER_IP:8500/ui" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,374 @@
+# Vereinfachte Nomad Cluster Architektur (Dev/Test)
+
+## Überblick
+
+Diese vereinfachte Architektur fokussiert sich auf schnelles Setup via GitHub Actions mit minimaler Komplexität. Security Features werden dokumentiert aber nicht initial implementiert.
+
+## Architektur-Komponenten (Simplified)
+
+### 1. Netzwerk-Architektur
+
+#### Virtual Network (VNet)
+
+- **Address Space**: 10.0.0.0/16
+- **Subnets**:
+  - **Cluster Subnet**: 10.0.10.0/24 (Server + Client Nodes)
+
+#### Network Security Groups (NSGs)
+
+- **Cluster NSG**:
+  - Erlaubt 4646 (Nomad HTTP API) - öffentlich für Testing
+  - Erlaubt 4647-4648 (Nomad RPC, Serf) - intern
+  - Erlaubt 22 (SSH) - öffentlich mit Source IP Restriction (GitHub Actions IPs + deine IP)
+  - Erlaubt 8500 (Consul HTTP API) - öffentlich für Testing
+  - Erlaubt 8301-8302 (Consul Serf) - intern
+
+### 2. Compute-Ressourcen
+
+#### Nomad Server Nodes
+
+- **VM Typ**: Standard_B2s (2 vCPU, 4 GB RAM) - Cost-optimized
+- **Anzahl**: 3 Nodes (für Consensus)
+- **OS**: Ubuntu 22.04 LTS
+- **Managed Disks**: Standard SSD (E10: 128 GB)
+- **Public IP**: Ja (für direkten Zugriff)
+
+#### Nomad Client Nodes
+
+- **VM Typ**: Standard_B2ms (2 vCPU, 8 GB RAM)
+- **Anzahl**: 2+ Nodes (via VMSS Auto-Scaling)
+- **OS**: Ubuntu 22.04 LTS
+- **Managed Disks**: Standard SSD (E10: 128 GB)
+- **Public IP**: Optional (nur für Testing)
+- **Scaling**: Azure Virtual Machine Scale Sets (VMSS)
+
+#### Consul (Optional, aber empfohlen)
+
+- **Co-located**: Auf Nomad Server Nodes installiert
+- **3 Consul Server** (co-located mit Nomad Servern)
+
+### 3. Vereinfachungen gegenüber Production
+
+**Weggelassen**:
+
+- ❌ Availability Zones (Single Zone)
+- ❌ Load Balancer (Direkt auf Server IP)
+- ❌ Separate Subnets
+- ❌ Azure Bastion (Public SSH)
+
+**Beibehalten**:
+
+- ✅ Infrastructure as Code (Terraform)
+- ✅ Configuration Management (Ansible)
+- ✅ Consul für Service Discovery
+- ✅ Managed Disks
+- ✅ NSG für Basic Security
+- ✅ Key Vault (für Secrets Management)
+- ✅ Multi-Server HA (3 Server für Consensus)
+- ✅ VMSS Auto-Scaling für Client Nodes
+- ✅ Log Analytics Workspace (für zentrales Logging)
+
+## Architektur-Diagramm (Simplified)
+
+```
+┌─────────────────────────────────────────────────────┐
+│                  Azure Region                        │
+│                                                       │
+│  ┌────────────────────────────────────────────────┐ │
+│  │         Virtual Network (10.0.0.0/16)          │ │
+│  │                                                 │ │
+│  │  ┌──────────────────────────────────────────┐  │ │
+│  │  │    Cluster Subnet (10.0.10.0/24)         │  │ │
+│  │  │                                           │  │ │
+│  │  │  ┌──────────────┐ ┌──────────────┐       │  │ │
+│  │  │  │ Nomad Server │ │ Nomad Server │       │  │ │
+│  │  │  │  + Consul 1  │ │  + Consul 2  │       │  │ │
+│  │  │  │              │ │              │       │  │ │
+│  │  │  └──────────────┘ └──────────────┘       │  │ │
+│  │  │         ┌──────────────┐                 │  │ │
+│  │  │         │ Nomad Server │                 │  │ │
+│  │  │         │  + Consul 3  │                 │  │ │
+│  │  │         │              │                 │  │ │
+│  │  │         └──────────────┘                 │  │ │
+│  │  │               ↑                           │  │ │
+│  │  │               │ Internal Communication    │  │ │
+│  │  │          ┌────┴────┐                     │  │ │
+│  │  │          │         │                     │  │ │
+│  │  │  ┌───────┴──────┐                       │  │ │
+│  │  │  │   VMSS      │                       │  │ │
+│  │  │  │  Clients    │                       │  │ │
+│  │  │  │ (Auto-Scale)│                       │  │ │
+│  │  │  └────────────┘                       │  │ │
+│  │  │                                           │  │ │
+│  │  └───────────────────────────────────────────┘  │ │
+│  └──────────────────────────────────────────────────┘ │
+│                                                       │
+│  ┌──────────────┐  ┌────────────────┐  ┌─────────┐  │
+│  │ Storage      │  │ Resource Group │  │Key Vault│  │
+│  │ Account      │  │  (Terraform    │  │         │  │
+│  │ (TF State)   │  │   State)       │  │         │  │
+│  └──────────────┘  └────────────────┘  └─────────┘  │
+│                                                       │
+│  ┌────────────────┐                                 │
+│  │ Log Analytics  │                                 │
+│  │   Workspace    │                                 │
+│  └────────────────┘                                 │
+└───────────────────────────────────────────────────────┘
+
+         ↑
+         │ GitHub Actions Deploy
+         │
+┌────────┴─────────┐
+│  GitHub Repo     │
+│  .github/        │
+│  workflows/      │
+└──────────────────┘
+```
+
+## Resource Gruppen Struktur
+
+```
+nomad-cluster-dev-rg        # Alle Cluster-Ressourcen
+nomad-tfstate-rg            # Terraform State Storage
+```
+
+## Terraform Struktur (Simplified)
+
+```
+terraform/
+├── main.tf                  # Main resources
+├── variables.tf             # Input variables
+├── outputs.tf               # Output values
+├── terraform.tfvars         # Variable values (gitignored)
+├── terraform.tfvars.example # Template
+└── versions.tf              # Provider versions
+
+ansible/
+├── inventory.ini            # Static inventory (generiert von Terraform)
+├── ansible.cfg
+├── playbooks/
+│   ├── nomad-server.yml
+│   ├── nomad-client.yml
+│   └── consul.yml
+└── roles/
+    ├── common/
+    ├── nomad/
+    └── consul/
+```
+
+## GitHub Actions Workflows
+
+### Workflow 1: Cluster Provisioning
+
+**Datei**: `.github/workflows/provision-cluster.yml`
+
+**Trigger**:
+
+- Manual (workflow_dispatch)
+- Push auf `main` Branch (terraform/ Änderungen)
+
+**Steps**:
+
+1. Checkout Repository
+2. Setup Terraform
+3. Azure Login (via Service Principal)
+4. Terraform Init (mit Remote State)
+5. Terraform Plan
+6. Terraform Apply
+7. Generate Ansible Inventory
+8. Setup Ansible
+9. Run Ansible Playbooks
+10. Output Cluster Info
+
+**Secrets benötigt**:
+
+- `AZURE_CLIENT_ID`
+- `AZURE_CLIENT_SECRET`
+- `AZURE_TENANT_ID`
+- `AZURE_SUBSCRIPTION_ID`
+- `SSH_PRIVATE_KEY`
+
+### Workflow 2: App Deployment
+
+**Datei**: `.github/workflows/deploy-app.yml`
+
+**Trigger**:
+
+- Manual (workflow_dispatch)
+- Push auf `main` Branch (apps/ Änderungen)
+
+**Steps**:
+
+1. Checkout Repository
+2. Setup Nomad CLI
+3. Get Nomad Server IP (from Azure)
+4. Validate Nomad Job Files
+5. Deploy Jobs to Nomad
+6. Verify Deployment Status
+
+**Secrets benötigt**:
+
+- `AZURE_CLIENT_ID`
+- `AZURE_CLIENT_SECRET`
+- `NOMAD_ADDR` (dynamisch ermittelt oder gespeichert)
+
+## Kosten-Schätzung (Monatlich)
+
+### Simplified Dev/Test Setup
+
+- **3x Nomad Server** (Standard_B2s): ~€90
+- **2-4x Nomad Client** (Standard_B2ms via VMSS): ~€60-120
+- **Networking** (VNet, NSG, Public IPs): ~€15
+- **Storage** (Standard SSD): ~€25
+- **Key Vault**: ~€5
+- **Log Analytics Workspace**: ~€10
+- **Terraform State Storage**: ~€2
+- **Gesamt**: **~€210-270/Monat**
+
+**Hinweis**: Bei Nicht-Nutzung können VMs gestoppt werden (nur Storage-Kosten ~€17/Monat)
+
+## Deployment Flow
+
+```
+┌──────────────────┐
+│  Developer       │
+│  pushes code     │
+└────────┬─────────┘
+         │
+         ▼
+┌────────────────────────────────────────┐
+│  GitHub Actions                         │
+│  Workflow: provision-cluster.yml        │
+│                                         │
+│  1. Terraform Apply                     │
+│     ├─ Create VNet + NSG               │
+│     ├─ Create VMs (1 Server, 2 Client) │
+│     └─ Output IPs                       │
+│                                         │
+│  2. Ansible Provisioning                │
+│     ├─ Install Docker                   │
+│     ├─ Install Consul                   │
+│     ├─ Install Nomad                    │
+│     ├─ Configure Services               │
+│     └─ Start Services                   │
+└────────┬───────────────────────────────┘
+         │
+         ▼
+┌─────────────────────┐
+│  Nomad Cluster      │
+│  ✓ Ready            │
+│  ✓ Server: Running  │
+│  ✓ Clients: 2/2     │
+└─────────────────────┘
+         │
+         ▼
+┌────────────────────────────────┐
+│  GitHub Actions                 │
+│  Workflow: deploy-app.yml       │
+│                                 │
+│  1. Get Cluster Info            │
+│  2. Validate Job Spec           │
+│  3. Deploy to Nomad             │
+│  4. Verify Status               │
+└────────┬───────────────────────┘
+         │
+         ▼
+┌─────────────────────┐
+│  App Running        │
+│  on Nomad Cluster   │
+└─────────────────────┘
+```
+
+## Access & Testing
+
+### Nomad UI
+
+```
+http://<server-public-ip>:4646/ui
+```
+
+### Consul UI
+
+```
+http://<server-public-ip>:8500/ui
+```
+
+### CLI Access
+
+```bash
+export NOMAD_ADDR=http://<server-public-ip>:4646
+nomad status
+```
+
+### SSH Access (Testing)
+
+```bash
+ssh -i ~/.ssh/nomad-cluster-key azureuser@<server-public-ip>
+```
+
+## Upgrade Path zu Production
+
+Wenn das Setup produktiv werden soll, folgende Schritte:
+
+1. **High Availability**: 3-5 Server Nodes + Load Balancer
+2. **Security**: Azure Bastion, Private IPs, Key Vault
+3. **Network Segmentation**: Separate Subnets + NSG Hardening
+4. **Availability Zones**: Multi-AZ Deployment
+5. **Auto-Scaling**: VMSS für Clients
+6. **Monitoring**: Log Analytics + Alerting
+7. **Backup**: Automatische Snapshots
+8. **TLS/ACL**: Verschlüsselung + Access Control
+
+Siehe `docs/architecture.md` für vollständige Production-Architektur.
+
+## Limitations & Trade-offs
+
+**Eingeschränkte HA**:
+
+- 3 Server bieten Basis-HA, aber keine AZ-Redundanz
+- Bei Zone-Ausfall: Cluster eventuell nicht verfügbar
+- Quorum erfordert mindestens 2 funktionierende Server
+
+**Public IPs**:
+
+- Security Risk (aber durch NSG eingeschränkt)
+- Produktiv nicht empfohlen
+- Nur für Testing/Dev akzeptabel
+
+**VMSS Scaling**:
+
+- Auto-Scaling basierend auf CPU/Memory möglich
+- Scaling Rules müssen konfiguriert werden
+- Scale-In/Out Limits definieren
+
+**Monitoring mit Log Analytics**:
+
+- Zentrales Logging über Log Analytics Workspace
+- Basis-Monitoring für VMs und Infrastruktur
+- Alerts müssen manuell konfiguriert werden
+- Kein Application-Level Monitoring
+
+**No Disaster Recovery**:
+
+- Keine automatischen Backups
+- Kein Multi-Region Setup
+- Recovery nur via Terraform Re-Deploy
+
+## Security Hinweise (für spätere Implementierung)
+
+Siehe `docs/security-hardening.md` für Details zu:
+
+- TLS Encryption (Nomad, Consul)
+- ACL Tokens
+- Network Security (Private IPs, Bastion)
+- Secrets Management (Key Vault)
+- OS Hardening
+- Compliance Requirements
+
+## Nächste Schritte
+
+1. ✅ Architektur geplant
+2. ⏭️ GitHub Actions Workflows erstellen
+3. ⏭️ Terraform Module entwickeln
+4. ⏭️ Ansible Playbooks erstellen
+5. ⏭️ Test Deployment durchführen

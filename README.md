@@ -1,22 +1,32 @@
-# Nomad Cluster Beispielprojekt
+# Nomad Cluster in Azure
 
-Dieses Projekt demonstriert die Einrichtung und Verwendung eines HashiCorp Nomad Clusters für die Orchestrierung von Workloads. Als Beispielanwendung dient eine einfache Python-Web-App, die Informationen über ihre Laufzeitumgebung anzeigt.
+Dieses Projekt implementiert einen hochverfügbaren HashiCorp Nomad Cluster in Azure mittels Terraform und Ansible. Der Cluster wird über GitHub Actions automatisiert bereitgestellt und kann für die Orchestrierung verschiedener Workloads verwendet werden.
 
 ## Projektstruktur
 
 ```
 nomad-cluster/
-├── Taskfile.yml          # Hauptaufgabendatei für das Projekt
-├── ops/                  # Operations-Dateien
-│   └── nomad/            # Nomad-Jobdefinitionen
-│       └── web.nomad.hcl # Nomad-Job für die Web-App
-└── src/                  # Quellcode der Web-Anwendung
-    ├── app.py            # Flask-Anwendung
-    ├── Dockerfile        # Docker-Build-Definition
-    ├── requirements.txt  # Python-Abhängigkeiten
-    ├── Taskfile.yml      # Aufgabendatei für die Anwendung
-    └── templates/        # HTML-Templates
-        └── index.html    # Hauptseite der Anwendung
+├── Taskfile.yml                # Hauptaufgabendatei für das Projekt
+├── .github/                   # GitHub Actions Workflows
+│   └── workflows/            
+│       ├── provision-cluster.yml # Workflow für Cluster-Bereitstellung
+│       └── deploy-app.yml       # Workflow für App-Deployment
+├── terraform/                 # Terraform IaC für Azure
+│   ├── main.tf               # Hauptkonfiguration
+│   ├── variables.tf           # Variablendefinitionen
+│   ├── outputs.tf             # Output-Definitionen
+│   └── terraform.tfvars.example # Beispiel-Variablenwerte
+├── ansible/                   # Ansible Konfiguration
+│   ├── playbooks/             # Ansible Playbooks
+│   └── templates/             # Konfigurationsvorlagen
+├── jobs/                      # Nomad Job-Definitionen
+│   └── example.nomad          # Beispiel-Job
+└── docs/                      # Dokumentation
+    ├── architecture.md         # Vollständige Architektur
+    ├── architecture-simple.md  # Vereinfachte Architektur
+    ├── decisions.md            # Architektur-Entscheidungen
+    ├── quick-start.md          # Schnellstart-Anleitung
+    └── security-notes.md       # Sicherheitshinweise
 ```
 
 ## Über Nomad
@@ -30,69 +40,89 @@ nomad-cluster/
 
 ## Funktionen dieses Projekts
 
-- **Nomad Dev-Cluster**: Einfache Einrichtung eines lokalen Entwicklungsclusters
-- **Nomad Job-Definitionen**: HCL-Konfiguration für die Bereitstellung von Workloads
-- **Docker-Integration**: Beispiel für die Verwendung des Docker-Treibers in Nomad
-- **Umgebungsvariablen**: Demonstration der Konfiguration von Umgebungsvariablen in Nomad-Jobs
-- **Versionierung**: Beispiel für die Verwendung von Variablen in Nomad-Jobs für dynamische Image-Tags
+- **Hochverfügbarer Nomad Cluster**: 3-Server-Setup für Consensus und Ausfallsicherheit
+- **Auto-Scaling**: Automatische Skalierung der Client-Nodes basierend auf Auslastung
+- **Infrastructure as Code**: Vollständig automatisierte Bereitstellung mit Terraform
+- **Configuration Management**: Automatisierte Konfiguration mit Ansible
+- **CI/CD-Integration**: GitHub Actions Workflows für Infrastruktur und Anwendungen
+- **Zentrales Logging**: Log Analytics Workspace für Monitoring und Fehlersuche
+- **Secrets Management**: Azure Key Vault für sichere Speicherung von Secrets
 
 ## Voraussetzungen
 
-- [Task](https://taskfile.dev/) - Task-Runner für Projektaufgaben
-- [Docker](https://www.docker.com/) - Für Container-Builds und lokale Ausführung
-- [Nomad](https://www.nomadproject.io/) - Für Cluster-Orchestrierung
-- [Python 3.6+](https://www.python.org/) - Für lokale Entwicklung
+- **Azure Subscription** mit Owner/Contributor-Rechten
+- **GitHub Repository** mit Actions aktiviert
+- **Service Principal** für Azure-Zugriff
+- **SSH Key Pair** für VM-Zugriff
 
-## Erste Schritte mit Nomad
+## Erste Schritte
 
-### 1. Nomad CLI installieren
-
-Zunächst muss die Nomad CLI installiert werden:
+### 1. Repository klonen
 
 ```bash
-task install-nomad-cli
+git clone https://github.com/yourusername/nomad-cluster.git
+cd nomad-cluster
 ```
 
-Dies installiert die Nomad-Binärdatei über Homebrew. Alternativ können Sie Nomad auch direkt von der [offiziellen Website](https://www.nomadproject.io/downloads) herunterladen.
+### 2. GitHub Actions Secrets einrichten
 
-### 2. Nomad-Cluster starten
+Richten Sie folgende Secrets in Ihrem GitHub Repository ein:
 
-Dieses Projekt verwendet einen Nomad-Entwicklungscluster für einfaches lokales Testen. Der Entwicklungsmodus ist ideal für das Kennenlernen von Nomad und zum Testen von Konfigurationen.
+- `AZURE_CREDENTIALS`: JSON-Credentials des Service Principals
+- `TF_STATE_RG`: Name der Resource Group für Terraform State
+- `TF_STATE_SA`: Name des Storage Accounts für Terraform State
+- `SSH_PRIVATE_KEY`: Privater SSH-Schlüssel für VM-Zugriff
+- `SSH_PUBLIC_KEY`: Öffentlicher SSH-Schlüssel für VM-Zugriff
+
+### 3. Terraform State Storage vorbereiten
 
 ```bash
-task start-dev-cluster
+az group create --name nomad-tfstate-rg --location westeurope
+az storage account create --name nomadtfstate$RANDOM --resource-group nomad-tfstate-rg --sku Standard_LRS
+az storage container create --name tfstate --account-name <storage-account-name>
 ```
 
-Der Entwicklungsserver startet mit:
-- Einem einzelnen Knoten, der sowohl als Server als auch als Client fungiert
-- Einer lokalen Adresse (http://localhost:4646) für die Web-UI und API
-- In-Memory-Speicherung (keine Persistenz zwischen Neustarts)
+### 4. Terraform Variablen anpassen
 
-Nach dem Start können Sie die Nomad-UI unter http://localhost:4646 aufrufen.
+```bash
+cp terraform/terraform.tfvars.example terraform/terraform.tfvars
+# Bearbeiten Sie terraform.tfvars mit Ihren Werten
+```
+
+### 5. Cluster bereitstellen
+
+Starten Sie den GitHub Actions Workflow "Provision Nomad Cluster" manuell oder durch Push auf den main-Branch.
 
 ## Nomad-Jobs verwalten
 
-### Job-Deployment
+### Job-Deployment über GitHub Actions
 
 Um die Beispielanwendung im Nomad-Cluster zu deployen:
 
-```bash
-task deploy-web
-```
+1. Navigieren Sie zu Ihrem GitHub Repository
+2. Wählen Sie den "Actions"-Tab
+3. Starten Sie den Workflow "Deploy Application to Nomad"
+4. Wählen Sie den Job-Pfad (z.B. `jobs/example.nomad`)
 
-Dieser Befehl:
-
-1. Erstellt ein Docker-Image mit einem Zeitstempel-Tag für einfache Versionierung
-2. Stellt den Job im Nomad-Cluster bereit, wobei die Image-Version als Variable übergeben wird
+Alternativ wird der Workflow auch automatisch ausgelöst, wenn Änderungen an Dateien im `jobs/`-Verzeichnis gepusht werden.
 
 ### Job-Status überprüfen
 
 Um den Status des Nomad-Clusters und der laufenden Jobs zu überprüfen:
 
 ```bash
-task status
-nomad job status server-info-web
+# Exportieren Sie die Nomad-Server-IP aus der Terraform-Ausgabe oder GitHub Actions
+export NOMAD_ADDR=http://<server-ip>:4646
+
+# Cluster-Status anzeigen
+nomad server members
+nomad node status
+
+# Job-Status anzeigen
+nomad job status example
 ```
+
+Alternativ können Sie auch die Nomad Web-UI unter `http://<server-ip>:4646/ui` besuchen.
 
 ### Job-Logs anzeigen
 
@@ -102,18 +132,18 @@ Um die Logs eines laufenden Jobs anzuzeigen:
 nomad alloc logs <alloc-id>
 ```
 
-Die Allokations-ID können Sie mit `nomad job status server-info-web` ermitteln.
+Die Allokations-ID können Sie mit `nomad job status example` ermitteln.
 
 ## Nomad Job-Konfiguration
 
-Die Job-Konfiguration in `ops/nomad/web.nomad.hcl` demonstriert wichtige Nomad-Konzepte:
+Die Beispiel-Job-Konfiguration in `jobs/example.nomad` demonstriert wichtige Nomad-Konzepte:
 
-- **Variablen**: Verwendung von Variablen für dynamische Konfiguration
 - **Job-Typen**: Konfiguration als Service-Job für langlebige Dienste
 - **Netzwerk**: Port-Mapping und Service-Discovery
 - **Ressourcen**: Zuweisung von CPU und Speicher
-- **Umgebungsvariablen**: Konfiguration der Laufzeitumgebung
 - **Docker-Integration**: Verwendung des Docker-Treibers
+- **Templates**: Dynamische Konfiguration mit Consul-Template
+- **Health Checks**: Zustandsprüfung für Services
 
 ## Erweiterte Nomad-Konzepte
 
@@ -125,11 +155,11 @@ Nomad bietet leistungsstarke Möglichkeiten zur Konfiguration von Umgebungsvaria
 env {
   # Statische Werte
   APP_ENV = "nomad"
-  
+
   # Node-Attribute verwenden
   HOSTNAME = "${attr.unique.hostname}"
   NODE_IP = "${attr.unique.network.ip-address}"
-  
+
   # Nomad-Metadaten verwenden
   NOMAD_ALLOC_ID = "${NOMAD_ALLOC_ID}"
 }
@@ -163,32 +193,72 @@ service {
 }
 ```
 
-## Weitere Nomad-Befehle
+## Terraform-Befehle
+
+Wenn Sie Terraform lokal ausführen möchten:
+
+```bash
+# Terraform initialisieren
+cd terraform
+terraform init \
+  -backend-config="resource_group_name=nomad-tfstate-rg" \
+  -backend-config="storage_account_name=<storage-account-name>" \
+  -backend-config="container_name=tfstate" \
+  -backend-config="key=nomad-cluster.tfstate"
+
+# Terraform Plan erstellen
+terraform plan -out=tfplan
+
+# Terraform Apply ausführen
+terraform apply tfplan
+
+# Terraform Destroy ausführen
+terraform destroy
+```
+
+## Nomad-Befehle
+
+Nützliche Nomad-Befehle für die Verwaltung des Clusters:
 
 ```bash
 # Job-Status anzeigen
 nomad job status
 
 # Job stoppen
-nomad job stop server-info-web
+nomad job stop example
 
 # Job-Definition validieren
-nomad job validate ops/nomad/web.nomad.hcl
+nomad job validate jobs/example.nomad
 
 # Job-Plan anzeigen (Dry-Run)
-nomad job plan ops/nomad/web.nomad.hcl
+nomad job plan jobs/example.nomad
 
 # Allokationen für einen Job anzeigen
-nomad job allocs server-info-web
+nomad job allocs example
 
 # Nomad-Knoten auflisten
 nomad node status
+
+# Nomad-Server-Status prüfen
+nomad server members
+
+# Consul-Status prüfen
+consul members
 ```
 
-## Verfügbare Tasks
+## Dokumentation
 
-Dieses Projekt verwendet Taskfile für die Automatisierung. Alle verfügbaren Aufgaben anzeigen:
+Dieses Projekt enthält umfangreiche Dokumentation im `docs/`-Verzeichnis:
 
-```bash
-task
-```
+- **architecture.md**: Vollständige Produktions-Architektur mit allen Features
+- **architecture-simple.md**: Vereinfachte Architektur für schnelles Deployment
+- **decisions.md**: Architektur-Entscheidungen und Begründungen
+- **quick-start.md**: Detaillierte Schritt-für-Schritt Anleitung
+- **security-notes.md**: Sicherheitshinweise und Best Practices
+
+Für weitere Informationen zu Nomad, Terraform und Ansible, besuchen Sie die offiziellen Dokumentationen:
+
+- [HashiCorp Nomad](https://www.nomadproject.io/docs)
+- [HashiCorp Terraform](https://www.terraform.io/docs)
+- [Ansible](https://docs.ansible.com/)
+- [Azure](https://learn.microsoft.com/de-de/azure/)

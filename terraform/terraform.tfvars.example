@@ -1,0 +1,28 @@
+# Grundlegende Einstellungen
+prefix     = "nmdclstr"
+location   = "westeurope"
+datacenter = "dc1"
+
+# VM Konfiguration
+server_count     = 3
+client_count     = 2
+client_min_count = 2
+client_max_count = 10
+server_vm_size   = "Standard_B2s"
+client_vm_size   = "Standard_B2ms"
+
+# SSH Zugriff
+admin_ssh_key   = "ssh-rsa AAAAB3NzaC1yc2E... your-public-key"
+allowed_ssh_ips = ["123.123.123.123/32"]  # Deine IP-Adresse
+
+# Software Versionen
+nomad_version  = "1.6.0"
+consul_version = "1.16.0"
+
+# Tags
+tags = {
+  Environment = "Dev"
+  Project     = "NomadCluster"
+  ManagedBy   = "Terraform"
+  Owner       = "YourName"
+}

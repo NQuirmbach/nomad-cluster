@@ -1,0 +1,75 @@
+datacenter = "{{ datacenter }}"
+data_dir = "/opt/nomad/data"
+
+server {
+  enabled = false
+}
+
+client {
+  enabled = true
+  server_join {
+    retry_join = [
+      {% for ip in server_ips %}
+      "{{ ip }}"{% if not loop.last %},{% endif %}
+      {% endfor %}
+    ]
+    retry_max = 5
+    retry_interval = "15s"
+  }
+  
+  # Reservieren von Ressourcen für das System
+  reserved {
+    cpu    = 500
+    memory = 512
+    disk   = 1024
+  }
+
+  # CNI Plugin Konfiguration
+  cni_path = "/opt/cni/bin"
+}
+
+consul {
+  address = "127.0.0.1:8500"
+  server_service_name = "nomad"
+  client_service_name = "nomad-client"
+  auto_advertise = true
+  server_auto_join = true
+  client_auto_join = true
+}
+
+telemetry {
+  collection_interval = "1s"
+  disable_hostname = true
+  prometheus_metrics = true
+  publish_allocation_metrics = true
+  publish_node_metrics = true
+}
+
+# Aktivieren aller Treiber
+plugin "docker" {
+  config {
+    allow_privileged = true
+    volumes {
+      enabled = true
+    }
+  }
+}
+
+plugin "raw_exec" {
+  config {
+    enabled = true
+  }
+}
+
+log_level = "INFO"
+enable_syslog = true
+
+addresses {
+  http = "0.0.0.0"
+  rpc  = "0.0.0.0"
+}
+
+ports {
+  http = 4646
+  rpc  = 4647
+}

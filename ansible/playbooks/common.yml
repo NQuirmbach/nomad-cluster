@@ -1,0 +1,100 @@
+---
+- name: Common Setup für alle Nodes
+  hosts: all
+  become: yes
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Installiere grundlegende Pakete
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+          - unzip
+          - jq
+          - net-tools
+          - dnsutils
+          - python3-pip
+        state: present
+
+    - name: Installiere Docker
+      block:
+        - name: Add Docker GPG key
+          apt_key:
+            url: https://download.docker.com/linux/ubuntu/gpg
+            state: present
+
+        - name: Add Docker Repository
+          apt_repository:
+            repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+            state: present
+
+        - name: Install Docker packages
+          apt:
+            name:
+              - docker-ce
+              - docker-ce-cli
+              - containerd.io
+            state: present
+
+        - name: Ensure Docker service is enabled and started
+          service:
+            name: docker
+            state: started
+            enabled: yes
+
+        - name: Add user to docker group
+          user:
+            name: "{{ ansible_user }}"
+            groups: docker
+            append: yes
+
+    - name: Configure system settings
+      block:
+        - name: Disable swap
+          command: swapoff -a
+          when: ansible_swaptotal_mb > 0
+
+        - name: Remove swap from fstab
+          lineinfile:
+            path: /etc/fstab
+            regexp: '^([^#].*\sswap\s+sw\s+.*)$'
+            line: '# \1'
+            backrefs: yes
+          when: ansible_swaptotal_mb > 0
+
+        - name: Set sysctl parameters
+          sysctl:
+            name: "{{ item.key }}"
+            value: "{{ item.value }}"
+            state: present
+            reload: yes
+          with_items:
+            - { key: 'vm.max_map_count', value: '262144' }
+            - { key: 'vm.swappiness', value: '0' }
+            - { key: 'net.ipv4.ip_local_port_range', value: '1024 65535' }
+            - { key: 'net.core.somaxconn', value: '65535' }
+            - { key: 'net.ipv4.tcp_max_syn_backlog', value: '65535' }
+            - { key: 'net.core.netdev_max_backlog', value: '4096' }
+            - { key: 'net.ipv4.tcp_keepalive_time', value: '600' }
+            - { key: 'net.ipv4.tcp_keepalive_intvl', value: '30' }
+            - { key: 'net.ipv4.tcp_keepalive_probes', value: '10' }
+
+    - name: Create directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      with_items:
+        - /etc/nomad.d
+        - /etc/consul.d
+        - /opt/nomad
+        - /opt/consul
+        - /opt/nomad/data
+        - /opt/consul/data

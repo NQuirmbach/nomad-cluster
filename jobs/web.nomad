@@ -4,6 +4,12 @@ variable "IMAGE_VERSION" {
   description = "The version tag for the Docker image"
 }
 
+variable "ACR_SERVER" {
+  type = string
+  default = ""
+  description = "The Azure Container Registry server URL"
+}
+
 job "server-info-web" {
   type = "service"
 
@@ -47,7 +53,7 @@ job "server-info-web" {
       }
       
       config {
-        image = "server-info-app:${var.IMAGE_VERSION}"
+        image = "${var.ACR_SERVER != "" ? "${var.ACR_SERVER}/" : ""}nomad-app:${var.IMAGE_VERSION}"
         ports = ["http"]
       }
     }

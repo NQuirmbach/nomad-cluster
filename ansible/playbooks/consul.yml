@@ -1,0 +1,51 @@
+---
+- name: Consul Setup
+  hosts: all
+  become: yes
+  vars:
+    consul_version: "{{ consul_version | default('1.16.0') }}"
+    datacenter: "{{ datacenter | default('dc1') }}"
+  tasks:
+    - name: Download Consul
+      get_url:
+        url: "https://releases.hashicorp.com/consul/{{ consul_version }}/consul_{{ consul_version }}_linux_amd64.zip"
+        dest: "/tmp/consul_{{ consul_version }}_linux_amd64.zip"
+        mode: '0644'
+
+    - name: Unzip Consul
+      unarchive:
+        src: "/tmp/consul_{{ consul_version }}_linux_amd64.zip"
+        dest: /usr/local/bin
+        remote_src: yes
+        mode: '0755'
+        owner: root
+        group: root
+
+    - name: Create Consul systemd service
+      template:
+        src: ../templates/consul.service.j2
+        dest: /etc/systemd/system/consul.service
+        mode: '0644'
+        owner: root
+        group: root
+
+    - name: Create Consul server config
+      template:
+        src: ../templates/consul-server.hcl.j2
+        dest: /etc/consul.d/consul.hcl
+        mode: '0644'
+      when: inventory_hostname in groups['nomad_servers']
+
+    - name: Create Consul client config
+      template:
+        src: ../templates/consul-client.hcl.j2
+        dest: /etc/consul.d/consul.hcl
+        mode: '0644'
+      when: inventory_hostname in groups['nomad_clients']
+
+    - name: Start and enable Consul service
+      systemd:
+        name: consul
+        state: started
+        enabled: yes
+        daemon_reload: yes
