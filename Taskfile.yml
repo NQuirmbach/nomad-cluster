@@ -1,0 +1,39 @@
+version: "3"
+tasks:
+  install-nomand-cli:
+    desc: Install nomad cli via homebrew
+    cmds:
+      - brew tap hashicorp/tap
+      - brew install hashicorp/tap/nomad
+      - nomad -v
+
+  start-dev-cluster:
+    desc: Start a nomad dev cluster
+    vars:
+      DEFAULT_INTERFACE:
+        sh: route -n get default | grep interface | awk '{print $2}'
+    cmds:
+      - export NOMAD_ADDR=http://localhost:4646
+      - |
+        nomad agent -dev \
+          -bind 0.0.0.0 \
+          -network-interface='{{.DEFAULT_INTERFACE}}'
+
+  status:
+    desc: Show nomad node status
+    cmds:
+      - nomad node status
+
+  deploy-web:
+    desc: Deploy a new version of the web app
+    vars:
+      TIMESTAMP:
+        sh: date +%Y%m%d%H%M%S
+    cmds:
+      - cd src && task build IMAGE_VERSION={{.TIMESTAMP}}
+      - nomad job run -var IMAGE_VERSION={{.TIMESTAMP}} ops/nomad/web.nomad.hcl
+
+  default:
+    desc: List all available tasks
+    cmds:
+      - task --list-all

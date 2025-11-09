@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "*.nomad.hcl": "hcl",
+        "*.nomad": "hcl"
+    },
+    "editor.formatOnSave": true
+}
