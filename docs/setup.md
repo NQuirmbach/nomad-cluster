@@ -2,13 +2,42 @@
 
 Diese Dokumentation beschreibt alle notwendigen Schritte, um die Azure-Umgebung und GitHub für die automatisierte Bereitstellung des Nomad Clusters einzurichten.
 
-## Übersicht
+## Setup-Übersicht
+
+### Was wird von wem erstellt?
+
+| Komponente | Wer erstellt | Wann | Wie |
+|------------|--------------|------|-----|
+| **Terraform Backend Storage** | Administrator (manuell) | Einmalig vor erstem Deployment | Azure CLI |
+| **Resource Group** | Setup-Script | Pro Environment (dev/stg/prd) | `setup-federated-identity.sh` |
+| **Managed Identity** | Setup-Script | Pro Environment | `setup-federated-identity.sh` |
+| **Federated Identity Credential** | Setup-Script | Pro Environment | `setup-federated-identity.sh` |
+| **RBAC auf Resource Group** | Setup-Script | Pro Environment | `setup-federated-identity.sh` |
+| **RBAC auf Backend Storage** | Setup-Script | Pro Environment | `setup-federated-identity.sh` |
+| **GitHub Environments** | Setup-Script (automatisch) | Pro Environment | `setup-federated-identity.sh` + GitHub CLI |
+| **GitHub Secrets** | Setup-Script (automatisch) | Pro Environment | `setup-federated-identity.sh` + GitHub CLI |
+| **OIDC Aktivierung** | Administrator (manuell) | Einmalig | GitHub Repository Settings |
+| **ACR** | Terraform (Pipeline) | Pro Environment | GitHub Actions Workflow |
+| **VMs, NSGs, VNet, etc.** | Terraform (Pipeline) | Pro Environment | GitHub Actions Workflow |
+| **Nomad/Consul Installation** | Ansible (Pipeline) | Pro Environment | GitHub Actions Workflow |
+
+### Setup-Reihenfolge
+
+1. ✅ **Terraform Backend** (einmalig, manuell via Azure CLI)
+2. ✅ **GitHub CLI Setup** (einmalig, manuell - optional für automatische GitHub-Konfiguration)
+3. ✅ **Federated Identity Setup** (pro Environment, automatisch via Script)
+4. ✅ **OIDC Aktivierung** (einmalig, manuell in GitHub Settings)
+5. ✅ **Deployment via Pipeline** (pro Environment, automatisch)
+
+## Technologie-Stack
 
 Für die automatisierte Bereitstellung des Nomad Clusters mit GitHub Actions und Azure verwenden wir:
 
 - **Federated Identity (OIDC)** für sichere Authentifizierung ohne gespeicherte Secrets
 - **Terraform Workspaces** für Multi-Environment-Deployments (dev, stg, prd)
 - **Azure Storage Backend** für zentrales State Management
+- **GitHub Actions** für CI/CD Pipeline
+- **Ansible** für Konfigurationsmanagement
 
 ![Federated Identity Architektur](https://learn.microsoft.com/de-de/azure/developer/github/media/github-actions/federated-identity-credential-flow.png)
 
@@ -50,7 +79,7 @@ Jedes Workspace hat:
 - Eigene Resource Group: `rg-nomad-cluster-{env}`
 - Eigenen Ressourcen-Prefix: `nmdclstr-{env}`
 - Eigene Managed Identity
-- Eigenes GitHub Environment: `azure-{env}`
+- Eigenes GitHub Environment: `{env}` (dev, stg, prd)
 
 ### Option A: Verwendung des Setup-Scripts (empfohlen)
 
@@ -70,12 +99,25 @@ chmod +x scripts/setup-federated-identity.sh
 ./scripts/setup-federated-identity.sh --env prd
 ```
 
-Das Script erstellt pro Umgebung:
+Das Script erstellt pro Umgebung automatisch:
 
+**Azure-Ressourcen:**
 - Resource Group `rg-nomad-cluster-{env}`
 - User-Assigned Managed Identity
-- Federated Identity Credential
-- RBAC-Zuweisungen für die benötigten Berechtigungen
+- Federated Identity Credential (OIDC)
+- RBAC Contributor auf Resource Group
+- RBAC Storage Blob Data Contributor auf Backend Storage Account
+
+**GitHub-Ressourcen (bei installierter GitHub CLI):**
+- GitHub Environment (`dev`, `stg`, `prd`)
+- Environment Secrets:
+  - `AZURE_CLIENT_ID`
+  - `AZURE_TENANT_ID`
+  - `AZURE_SUBSCRIPTION_ID`
+
+**Voraussetzungen:**
+- Azure CLI installiert und angemeldet (`az login`)
+- GitHub CLI installiert und angemeldet (`gh auth login`) - optional, aber empfohlen
 
 ### Option B: Manuelle Einrichtung
 
@@ -139,44 +181,30 @@ Falls du die Ressourcen manuell erstellen möchtest, führe folgende Schritte au
    az role assignment create --assignee "$PRINCIPAL_ID" --role "Virtual Machine User Login" --scope "$VM_SCOPE"
    ```
 
-## 2. GitHub Repository konfigurieren
+## 2. GitHub CLI Setup (optional, aber empfohlen)
 
-Nach der Einrichtung der Azure-Ressourcen müssen folgende Schritte im GitHub Repository durchgeführt werden.
+Für die automatische Erstellung von GitHub Environments und Secrets:
 
-### 2.1 Environments erstellen
+```bash
+# GitHub CLI installieren
+# macOS:
+brew install gh
 
-Erstelle für jede Umgebung ein separates GitHub Environment:
+# Linux:
+sudo apt install gh
 
-1. Navigiere zu deinem Repository auf GitHub
-2. Gehe zu **Settings** > **Environments**
-3. Erstelle folgende Environments:
-   - `azure-dev` (Development)
-   - `azure-stg` (Staging)
-   - `azure-prd` (Production)
-4. Optional: Konfiguriere Deployment Protection Rules
-   - Für `azure-prd`: Required Reviewers aktivieren
-   - Für `azure-stg`: Optional Required Reviewers
-   - Für `azure-dev`: Keine Einschränkungen
+# Windows:
+winget install --id GitHub.cli
 
-### 2.2 Environment Secrets hinzufügen
+# Authentifizieren
+gh auth login
+```
 
-Füge die Secrets **pro Environment** hinzu:
+**Hinweis**: Falls GitHub CLI nicht installiert ist, zeigt das Setup-Script die Werte an, die manuell in GitHub hinzugefügt werden müssen.
 
-1. Navigiere zu **Settings** > **Environments**
-2. Wähle ein Environment (z.B. `azure-dev`)
-3. Unter "Environment secrets" füge folgende Secrets hinzu:
+## 3. GitHub Repository konfigurieren
 
-   | Secret Name | Wert | Beschreibung |
-   |-------------|------|-------------|
-   | `AZURE_CLIENT_ID` | Client ID der Managed Identity | Ausgabe des Setup-Scripts für dieses Environment |
-   | `AZURE_TENANT_ID` | Tenant ID deines Azure-Kontos | Ausgabe von `az account show --query tenantId -o tsv` |
-   | `AZURE_SUBSCRIPTION_ID` | Subscription ID | Ausgabe von `az account show --query id -o tsv` |
-   | `NOMAD_RESOURCE_GROUP`  | `rg-nomad-cluster-dev`         | Name der Resource Group                               |
-   | `ACR_NAME`              | `nomadacr`                     | Name der Azure Container Registry                     |
-
-**Wichtig**: Jedes Environment (`azure-dev`, `azure-stg`, `azure-prd`) benötigt seine eigenen Secrets mit der jeweiligen Client ID der Managed Identity für diese Umgebung.
-
-### 2.3 Workflow-Berechtigungen aktivieren
+### 3.1 OIDC Aktivierung (einmalig, manuell erforderlich)
 
 1. Gehe zu **Settings** > **Actions** > **General**
 2. Unter "Workflow permissions":
@@ -186,9 +214,17 @@ Füge die Secrets **pro Environment** hinzu:
    - Aktiviere **Allow GitHub Actions to request the OpenID Connect ID token**
 4. Klicke auf **Save**
 
-## 3. Terraform Workspaces verwenden
+### 3.2 Deployment Protection Rules (optional)
 
-### 3.1 Lokale Verwendung
+Für zusätzliche Sicherheit in Production:
+
+1. Gehe zu **Settings** > **Environments** > **prd**
+2. Aktiviere **Required reviewers**
+3. Füge Reviewer hinzu, die Deployments genehmigen müssen
+
+## 4. Terraform Workspaces verwenden
+
+### 4.1 Lokale Verwendung
 
 ```bash
 cd terraform
@@ -209,7 +245,33 @@ terraform workspace select stg
 terraform workspace select prd
 ```
 
-### 3.2 GitHub Actions Workflow
+### 4.2 Environment-spezifische Konfiguration
+
+Jedes Environment kann eigene Terraform-Variablen haben:
+
+```
+terraform/
+├── terraform.tfvars                    # Basis-Konfiguration
+└── environments/
+    ├── dev/terraform.tfvars           # Dev-spezifische Werte
+    ├── stg/terraform.tfvars           # Staging-spezifische Werte
+    └── prd/terraform.tfvars           # Production-spezifische Werte
+```
+
+Beispiel für `environments/prd/terraform.tfvars`:
+```hcl
+server_count = 5
+client_count = 10
+
+tags = {
+  Environment = "Prod"
+  Project     = "NomadCluster"
+  ManagedBy   = "Terraform"
+  Owner       = "YourName"
+}
+```
+
+### 4.3 GitHub Actions Workflow
 
 Der Workflow `.github/workflows/provision-cluster.yml` unterstützt Multi-Environment-Deployments:
 
@@ -220,7 +282,7 @@ Der Workflow `.github/workflows/provision-cluster.yml` unterstützt Multi-Enviro
 5. Klicke auf **Run workflow**
 
 Der Workflow:
-- Wählt automatisch das richtige GitHub Environment (`azure-dev`, `azure-stg`, `azure-prd`)
+- Wählt automatisch das richtige GitHub Environment (`dev`, `stg`, `prd`)
 - Authentifiziert sich via OIDC mit der entsprechenden Managed Identity
 - Wechselt zum entsprechenden Terraform Workspace
 - Führt die gewählte Aktion aus
@@ -252,7 +314,7 @@ on:
 jobs:
   provision:
     runs-on: ubuntu-latest
-    environment: azure-${{ github.event.inputs.environment || 'dev' }}
+    environment: ${{ github.event.inputs.environment || 'dev' }}
     
     steps:
       - uses: actions/checkout@v4
@@ -334,22 +396,77 @@ Nach Abschluss der Einrichtung kannst du die Konfiguration überprüfen:
    - Klicke auf **Run workflow**
    - Überprüfe, ob der Workflow erfolgreich ausgeführt wird
 
+## Komplette Setup-Anleitung (Schritt für Schritt)
+
+### Einmalige Vorbereitung
+
+1. **Terraform Backend erstellen**:
+   ```bash
+   az group create --name tf-state-rg --location westeurope
+   az storage account create --name tfstatenomadcluster --resource-group tf-state-rg --sku Standard_LRS
+   az storage container create --name tfstate --account-name tfstatenomadcluster
+   ```
+
+2. **GitHub CLI installieren und authentifizieren** (optional, aber empfohlen):
+   ```bash
+   # Installation (macOS)
+   brew install gh
+   
+   # Authentifizierung
+   gh auth login
+   ```
+
+3. **OIDC in GitHub aktivieren**:
+   - Gehe zu Settings → Actions → General
+   - Aktiviere "Allow GitHub Actions to request the OpenID Connect ID token"
+
+### Pro Environment (dev, stg, prd)
+
+1. **Setup-Script ausführen**:
+   ```bash
+   chmod +x scripts/setup-federated-identity.sh
+   ./scripts/setup-federated-identity.sh --env dev
+   ```
+   
+   Das Script erstellt automatisch:
+   - ✅ Azure Resource Group
+   - ✅ Managed Identity
+   - ✅ Federated Identity Credential
+   - ✅ RBAC-Berechtigungen
+   - ✅ GitHub Environment (bei installierter GitHub CLI)
+   - ✅ GitHub Secrets (bei installierter GitHub CLI)
+
+2. **Environment-spezifische Terraform-Variablen anpassen** (optional):
+   - Bearbeite `terraform/environments/{env}/terraform.tfvars`
+   - Passe Werte wie `server_count`, `client_count`, `tags` an
+
+3. **Deployment starten**:
+   - Gehe zu Actions → "Provision Nomad Cluster"
+   - Klicke "Run workflow"
+   - Wähle Environment: `dev`
+   - Wähle Action: `apply`
+
+### Für weitere Environments
+
+Wiederhole die Schritte unter "Pro Environment" mit `--env stg` oder `--env prd`.
+
 ## Fehlerbehebung
 
 ### Häufige Probleme
 
 1. **Authentifizierungsfehler**:
-
-   - Überprüfe, ob der Environment-Name in GitHub exakt `azure-dev` ist
+   - Überprüfe, ob der Environment-Name in GitHub korrekt ist (`dev`, `stg`, `prd`)
    - Stelle sicher, dass die OIDC-Berechtigungen aktiviert sind
+   - Prüfe, ob die Secrets im richtigen Environment hinterlegt sind
 
 2. **Berechtigungsfehler**:
-
    - Überprüfe, ob die RBAC-Rollen korrekt zugewiesen sind
-   - Stelle sicher, dass die Managed Identity Zugriff auf die erforderlichen Ressourcen hat
+   - Stelle sicher, dass die Managed Identity Contributor-Rechte auf die Resource Group hat
+   - Prüfe Storage Blob Data Contributor auf Backend Storage Account
 
-3. **ACR-Zugriffsfehler**:
-   - Überprüfe, ob die Managed Identity die Rolle "AcrPush" für die Container Registry hat
+3. **Terraform State Lock**:
+   - Falls ein State Lock hängt: `terraform force-unlock <LOCK_ID>`
+   - Prüfe RBAC auf Storage Account
 
 ### Debugging-Befehle
 

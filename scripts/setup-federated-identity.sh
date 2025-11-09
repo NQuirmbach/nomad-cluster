@@ -72,7 +72,7 @@ esac
 # Konfiguration mit String-Interpolation
 PREFIX="nmdclstr-${ENV}"
 RESOURCE_GROUP="rg-nomad-cluster-${ENV}"
-ENVIRONMENT="azure-${ENV}"
+ENVIRONMENT="${ENV}"
 TERRAFORM_WORKSPACE="${ENV}"
 
 # ACR-Name generieren (ohne Bindestriche)
@@ -90,6 +90,14 @@ echo -e "${YELLOW}Starte Setup der Federated Identity für GitHub Actions...${NC
 if ! command -v az &> /dev/null; then
     echo -e "${RED}Azure CLI ist nicht installiert. Bitte installiere es zuerst.${NC}"
     exit 1
+fi
+
+# Prüfen, ob GitHub CLI installiert ist
+if ! command -v gh &> /dev/null; then
+    echo -e "${YELLOW}GitHub CLI ist nicht installiert. GitHub Environment und Secrets müssen manuell erstellt werden.${NC}"
+    GH_CLI_AVAILABLE=false
+else
+    GH_CLI_AVAILABLE=true
 fi
 
 # Prüfen, ob der Benutzer angemeldet ist
@@ -156,46 +164,70 @@ else
     echo -e "${GREEN}Federated Identity Credential existiert bereits.${NC}"
 fi
 
-# RBAC-Berechtigungen für ACR zuweisen (falls ACR bereits existiert)
-echo -e "${YELLOW}Prüfe RBAC-Berechtigungen für ACR...${NC}"
-if az acr show --name "$ACR_NAME" --resource-group "$RESOURCE_GROUP" &>/dev/null; then
-    ACR_ID=$(az acr show --name "$ACR_NAME" --resource-group "$RESOURCE_GROUP" --query id -o tsv)
-    az role assignment create \
-        --assignee "$PRINCIPAL_ID" \
-        --role "AcrPush" \
-        --scope "$ACR_ID" 2>/dev/null || echo -e "${YELLOW}RBAC-Zuweisung existiert bereits oder konnte nicht erstellt werden.${NC}"
-    echo -e "${GREEN}RBAC-Berechtigungen für ACR zugewiesen.${NC}"
-else
-    echo -e "${YELLOW}ACR existiert noch nicht. RBAC-Berechtigungen werden automatisch über Terraform zugewiesen.${NC}"
-fi
-
-# RBAC-Berechtigungen für Resource Group zuweisen (für VM-Zugriff)
+# RBAC-Berechtigungen für Resource Group zuweisen
 echo -e "${YELLOW}Weise RBAC-Berechtigungen für Resource Group zu...${NC}"
 RG_ID=$(az group show --name "$RESOURCE_GROUP" --query id -o tsv)
 az role assignment create \
     --assignee "$PRINCIPAL_ID" \
-    --role "Reader" \
-    --scope "$RG_ID"
+    --role "Contributor" \
+    --scope "$RG_ID" 2>/dev/null || echo -e "${YELLOW}RBAC-Zuweisung existiert bereits.${NC}"
 echo -e "${GREEN}RBAC-Berechtigungen für Resource Group zugewiesen.${NC}"
+echo -e "${GREEN}Die Managed Identity hat jetzt Contributor-Rechte auf die Resource Group.${NC}"
 
-# RBAC-Berechtigungen für VM-Zugriff zuweisen
-echo -e "${YELLOW}Weise RBAC-Berechtigungen für VM-Zugriff zu...${NC}"
-VM_SCOPE="/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.Compute/virtualMachines/*"
-az role assignment create \
-    --assignee "$PRINCIPAL_ID" \
-    --role "Virtual Machine User Login" \
-    --scope "$VM_SCOPE"
-echo -e "${GREEN}RBAC-Berechtigungen für VM-Zugriff zugewiesen.${NC}"
+# RBAC-Berechtigungen für Terraform Backend Storage Account zuweisen
+echo -e "${YELLOW}Prüfe RBAC-Berechtigungen für Terraform Backend Storage Account...${NC}"
+TF_STATE_SA="tfstatenomadcluster"
+TF_STATE_RG="tf-state-rg"
+
+if az storage account show --name "$TF_STATE_SA" --resource-group "$TF_STATE_RG" &>/dev/null; then
+    SA_ID=$(az storage account show --name "$TF_STATE_SA" --resource-group "$TF_STATE_RG" --query id -o tsv)
+    
+    # Storage Blob Data Contributor für State-Zugriff
+    az role assignment create \
+        --assignee "$PRINCIPAL_ID" \
+        --role "Storage Blob Data Contributor" \
+        --scope "$SA_ID" 2>/dev/null || echo -e "${YELLOW}RBAC-Zuweisung existiert bereits.${NC}"
+    
+    echo -e "${GREEN}RBAC-Berechtigungen für Terraform Backend Storage Account zugewiesen.${NC}"
+else
+    echo -e "${YELLOW}Terraform Backend Storage Account existiert noch nicht.${NC}"
+    echo -e "${YELLOW}Bitte erstelle ihn mit den Befehlen in den 'Nächsten Schritten'.${NC}"
+    echo -e "${YELLOW}Danach führe dieses Script erneut aus, um die RBAC-Berechtigungen zu setzen.${NC}"
+fi
 
 echo -e "\n${GREEN}=== Setup abgeschlossen für Environment: $ENV ===${NC}"
-echo -e "${GREEN}Bitte füge die folgenden Secrets zu deinem GitHub Repository hinzu:${NC}"
-echo -e "${YELLOW}AZURE_CLIENT_ID:${NC} $CLIENT_ID"
-echo -e "${YELLOW}AZURE_TENANT_ID:${NC} $TENANT_ID"
-echo -e "${YELLOW}AZURE_SUBSCRIPTION_ID:${NC} $SUBSCRIPTION_ID"
-echo -e "${YELLOW}NOMAD_RESOURCE_GROUP:${NC} $RESOURCE_GROUP"
-echo -e "${YELLOW}ACR_NAME:${NC} $ACR_NAME"
-echo -e "\n${GREEN}Wichtig: Stelle sicher, dass du in GitHub ein Environment '$ENVIRONMENT' erstellt hast.${NC}"
-echo -e "${GREEN}Aktiviere 'Allow GitHub Actions to request the OpenID Connect ID token' in den Repository-Einstellungen.${NC}"
+
+# GitHub Environment und Secrets erstellen (falls GitHub CLI verfügbar)
+if [ "$GH_CLI_AVAILABLE" = true ]; then
+    echo -e "\n${YELLOW}Erstelle GitHub Environment und Secrets...${NC}"
+    
+    # Prüfen, ob gh authentifiziert ist
+    if gh auth status &>/dev/null; then
+        # Environment erstellen
+        echo -e "${YELLOW}Erstelle GitHub Environment '$ENVIRONMENT'...${NC}"
+        gh api repos/${GITHUB_ORG}/${GITHUB_REPO}/environments/${ENVIRONMENT} -X PUT 2>/dev/null || \
+            echo -e "${YELLOW}Environment existiert bereits oder konnte nicht erstellt werden.${NC}"
+        
+        # Secrets erstellen
+        echo -e "${YELLOW}Erstelle GitHub Secrets...${NC}"
+        echo "$CLIENT_ID" | gh secret set AZURE_CLIENT_ID --env $ENVIRONMENT --repo ${GITHUB_ORG}/${GITHUB_REPO}
+        echo "$TENANT_ID" | gh secret set AZURE_TENANT_ID --env $ENVIRONMENT --repo ${GITHUB_ORG}/${GITHUB_REPO}
+        echo "$SUBSCRIPTION_ID" | gh secret set AZURE_SUBSCRIPTION_ID --env $ENVIRONMENT --repo ${GITHUB_ORG}/${GITHUB_REPO}
+        
+        echo -e "${GREEN}GitHub Environment und Secrets wurden erstellt!${NC}"
+        echo -e "${YELLOW}Hinweis: OIDC muss manuell aktiviert werden (Settings → Actions → General → OpenID Connect)${NC}"
+    else
+        echo -e "${YELLOW}GitHub CLI ist nicht authentifiziert. Führe 'gh auth login' aus.${NC}"
+        echo -e "${YELLOW}Secrets müssen manuell hinzugefügt werden.${NC}"
+    fi
+else
+    echo -e "\n${GREEN}Bitte füge die folgenden Secrets zu deinem GitHub Repository hinzu:${NC}"
+    echo -e "${YELLOW}AZURE_CLIENT_ID:${NC} $CLIENT_ID"
+    echo -e "${YELLOW}AZURE_TENANT_ID:${NC} $TENANT_ID"
+    echo -e "${YELLOW}AZURE_SUBSCRIPTION_ID:${NC} $SUBSCRIPTION_ID"
+    echo -e "\n${GREEN}Wichtig: Stelle sicher, dass du in GitHub ein Environment '$ENVIRONMENT' erstellt hast.${NC}"
+    echo -e "${GREEN}Aktiviere 'Allow GitHub Actions to request the OpenID Connect ID token' in den Repository-Einstellungen.${NC}"
+fi
 echo -e "\n${YELLOW}Verwendete Konfiguration:${NC}"
 echo -e "${YELLOW}Environment:${NC} $ENV"
 echo -e "${YELLOW}GitHub Environment:${NC} $ENVIRONMENT"
@@ -204,16 +236,3 @@ echo -e "${YELLOW}Resource Group:${NC} $RESOURCE_GROUP"
 echo -e "${YELLOW}Location:${NC} $LOCATION"
 echo -e "${YELLOW}Prefix:${NC} $PREFIX"
 echo -e "${YELLOW}ACR Name:${NC} $ACR_NAME"
-
-echo -e "\n${GREEN}Nächste Schritte:${NC}"
-echo -e "1. Erstelle Terraform Backend Storage Account (falls noch nicht vorhanden):"
-echo -e "   ${YELLOW}az group create --name tf-state-rg --location $LOCATION${NC}"
-echo -e "   ${YELLOW}az storage account create --name tfstatenomadcluster --resource-group tf-state-rg --location $LOCATION --sku Standard_LRS${NC}"
-echo -e "   ${YELLOW}az storage container create --name tfstate --account-name tfstatenomadcluster${NC}"
-echo -e ""
-echo -e "2. Initialisiere Terraform mit Workspace:"
-echo -e "   ${YELLOW}cd terraform${NC}"
-echo -e "   ${YELLOW}terraform init${NC}"
-echo -e "   ${YELLOW}terraform workspace new $TERRAFORM_WORKSPACE || terraform workspace select $TERRAFORM_WORKSPACE${NC}"
-echo -e "   ${YELLOW}terraform plan${NC}"
-echo -e "   ${YELLOW}terraform apply${NC}"

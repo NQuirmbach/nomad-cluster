@@ -4,112 +4,124 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: 'Environment (Terraform Workspace)'
+        description: "Environment (Terraform Workspace)"
         required: true
-        default: 'dev'
+        default: "dev"
         type: choice
         options:
           - dev
           - stg
           - prd
       action:
-        description: 'Action to perform'
+        description: "Action to perform"
         required: true
-        default: 'apply'
+        default: "apply"
         type: choice
         options:
           - apply
           - destroy
   push:
     branches: [main]
-    paths: ['terraform/**', 'ansible/**']
+    paths: ["terraform/**", "ansible/**"]
+
+env:
+  AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  ARM_USE_OIDC: true
+  ARM_USE_CLI: false
 
 jobs:
   provision:
     name: Provision Infrastructure
     runs-on: ubuntu-latest
-    environment: azure-${{ github.event.inputs.environment || 'dev' }}
-    
+    environment: ${{ github.event.inputs.environment || 'dev' }}
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set Environment Variables
         run: |
           ENV=${{ github.event.inputs.environment || 'dev' }}
           echo "TF_WORKSPACE=$ENV" >> $GITHUB_ENV
           echo "RESOURCE_GROUP=rg-nomad-cluster-$ENV" >> $GITHUB_ENV
-      
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: '1.5.0'
-          
+          terraform_version: "1.5.0"
+
       - name: Azure Login with OIDC
         uses: azure/login@v1
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          
+          audience: api://AzureADTokenExchange
+          allow-no-subscriptions: false
+
       - name: Terraform Init
         working-directory: ./terraform
         run: terraform init
-      
+
       - name: Select/Create Terraform Workspace
         working-directory: ./terraform
         run: |
           terraform workspace select $TF_WORKSPACE || terraform workspace new $TF_WORKSPACE
           terraform workspace show
-            
+
       - name: Terraform Plan/Apply
         if: github.event.inputs.action != 'destroy'
         working-directory: ./terraform
         run: |
-          terraform plan -out=tfplan
+          terraform plan -var-file="environments/$TF_WORKSPACE/terraform.tfvars" -out=tfplan
           terraform apply -auto-approve tfplan
-          
+
       - name: Terraform Destroy
         if: github.event.inputs.action == 'destroy'
         working-directory: ./terraform
         run: |
-          terraform destroy -auto-approve
-          
+          terraform destroy -var-file="environments/$TF_WORKSPACE/terraform.tfvars" -auto-approve
+
       - name: Generate Inventory
         if: github.event.inputs.action != 'destroy'
         working-directory: ./terraform
         run: |
           terraform output -raw ansible_inventory > ../ansible/inventory.ini
-          
+
       - name: Add VMSS Instances to Inventory
         if: github.event.inputs.action != 'destroy'
         working-directory: ./terraform
         run: |
           RESOURCE_GROUP=$(terraform output -raw resource_group_name)
           VMSS_NAME=$(terraform output -json nomad_client_vmss_id | jq -r 'split("/") | .[-1]')
-          
+
           # Get VMSS instance IPs
           INSTANCE_IPS=$(az vmss list-instance-public-ips -g $RESOURCE_GROUP -n $VMSS_NAME --query "[].ipAddress" -o tsv)
-          
+
           # Add instances to inventory
           INSTANCE_NUM=0
           for IP in $INSTANCE_IPS; do
             echo "nomad-client-${INSTANCE_NUM} ansible_host=${IP}" >> ../ansible/inventory.ini
             INSTANCE_NUM=$((INSTANCE_NUM + 1))
           done
-          
+
           echo "Generated inventory:"
           cat ../ansible/inventory.ini
-          
+
       - name: Setup Ansible
         if: github.event.inputs.action != 'destroy'
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-          
+          python-version: "3.11"
+
       - name: Install Ansible
         if: github.event.inputs.action != 'destroy'
         run: pip install ansible==2.15.0
-        
+
       - name: Setup SSH
         if: github.event.inputs.action != 'destroy'
         working-directory: ./terraform
@@ -118,18 +130,18 @@ jobs:
           terraform output -raw ssh_private_key > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H $(terraform output -json nomad_server_public_ips | jq -r '.[]') >> ~/.ssh/known_hosts 2>/dev/null || true
-          
+
       - name: Wait for VMs
         if: github.event.inputs.action != 'destroy'
         run: sleep 60
-        
+
       - name: Run Ansible Playbooks
         if: github.event.inputs.action != 'destroy'
         working-directory: ./ansible
         run: |
           export ANSIBLE_HOST_KEY_CHECKING=False
           ansible-playbook -i inventory.ini playbooks/site.yml
-          
+
       - name: Output Cluster Info
         if: github.event.inputs.action != 'destroy'
         working-directory: ./terraform
