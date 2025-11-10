@@ -13,6 +13,13 @@ server {
     retry_max = 5
     retry_interval = "15s"
   }
+  
+  # Automatische Bereinigung von toten Clients
+  node_gc_threshold = "5m"
+  dead_server_cleanup {
+    enabled = true
+    interval = "60s"
+  }
 }
 
 client {

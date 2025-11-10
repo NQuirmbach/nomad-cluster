@@ -79,7 +79,7 @@ variable "datacenter" {
 variable "nomad_version" {
   description = "Nomad Version"
   type        = string
-  default     = "1.6.0"
+  default     = "1.10.5"
 }
 
 variable "consul_version" {

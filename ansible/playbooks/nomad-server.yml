@@ -4,21 +4,21 @@
   become: yes
   gather_facts: yes
   vars:
-    nomad_version: "1.6.0"
+    nomad_version: "1.10.5"
     datacenter: "dc1"
   tasks:
     - name: Download Nomad
       get_url:
         url: "https://releases.hashicorp.com/nomad/{{ nomad_version }}/nomad_{{ nomad_version }}_linux_amd64.zip"
         dest: "/tmp/nomad_{{ nomad_version }}_linux_amd64.zip"
-        mode: '0644'
+        mode: "0644"
 
     - name: Unzip Nomad
       unarchive:
         src: "/tmp/nomad_{{ nomad_version }}_linux_amd64.zip"
         dest: /usr/local/bin
         remote_src: yes
-        mode: '0755'
+        mode: "0755"
         owner: root
         group: root
 
@@ -26,7 +26,7 @@
       template:
         src: ../templates/nomad.service.j2
         dest: /etc/systemd/system/nomad.service
-        mode: '0644'
+        mode: "0644"
         owner: root
         group: root
 
@@ -38,7 +38,7 @@
       template:
         src: ../templates/nomad-server.hcl.j2
         dest: /etc/nomad.d/nomad.hcl
-        mode: '0644'
+        mode: "0644"
 
     - name: Start and enable Nomad service
       systemd:
