@@ -103,23 +103,11 @@ jobs:
         run: |
           terraform output -raw ansible_inventory > ../ansible/inventory.ini
 
-      - name: Add VMSS Instances to Inventory
+      - name: Show Generated Inventory
         if: github.event.inputs.action == 'apply' || github.event.inputs.action == ''
         working-directory: ./terraform
         run: |
-          RESOURCE_GROUP=$(terraform output -raw resource_group_name)
-          VMSS_NAME=$(terraform output -json nomad_client_vmss_id | jq -r 'split("/") | .[-1]')
-
-          # Get private IPs from VMSS instances
-          INSTANCE_IPS=$(az vmss nic list -g $RESOURCE_GROUP --vmss-name $VMSS_NAME --query "[].ipConfigurations[0].privateIPAddress" -o tsv)
-
-          INSTANCE_NUM=0
-          for IP in $INSTANCE_IPS; do
-            echo "nomad-client-${INSTANCE_NUM} ansible_host=${IP}" >> ../ansible/inventory.ini
-            INSTANCE_NUM=$((INSTANCE_NUM + 1))
-          done
-
-          echo "Generated inventory:"
+          echo "Generated inventory (Servers only - Clients via Cloud-Init):"
           cat ../ansible/inventory.ini
 
       - name: Extract SSH Key
