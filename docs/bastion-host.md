@@ -1,6 +1,8 @@
 # Bastion Host für Nomad Cluster
 
-Der Bastion Host dient als sicherer Einstiegspunkt für SSH-Zugriffe auf die Nomad Clients im Cluster. Er ist die einzige Ressource mit einer öffentlichen IP-Adresse, die direkten SSH-Zugriff von außen erlaubt. Die Nomad Clients akzeptieren SSH-Verbindungen nur vom Bastion Host aus.
+> **HINWEIS:** Diese Dokumentation bezieht sich auf die frühere Implementierung mit einem selbst verwalteten Bastion Host. Die aktuelle Implementierung verwendet den Azure Bastion Service. Bitte siehe [Azure Bastion](./azure-bastion.md) für die aktuelle Dokumentation.
+
+Der Bastion Host diente als sicherer Einstiegspunkt für SSH-Zugriffe auf die Nomad Clients im Cluster. Er war die einzige Ressource mit einer öffentlichen IP-Adresse, die direkten SSH-Zugriff von außen erlaubte. Die Nomad Clients akzeptierten SSH-Verbindungen nur vom Bastion Host aus.
 
 ## Architektur
 

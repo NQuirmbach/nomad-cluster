@@ -64,8 +64,6 @@ module "compute" {
   subnet_id           = module.network.cluster_subnet_id
   server_nsg_id       = module.network.server_nsg_id
   client_nsg_id       = module.network.client_nsg_id
-  bastion_subnet_id   = module.network.bastion_subnet_id
-  bastion_nsg_id      = module.network.bastion_nsg_id
   
   server_count     = var.server_count
   client_count     = var.client_count

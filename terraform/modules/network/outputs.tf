@@ -24,11 +24,16 @@ output "client_nsg_id" {
 }
 
 output "bastion_subnet_id" {
-  description = "ID des Bastion Subnets"
+  description = "ID des Azure Bastion Subnets"
   value       = azurerm_subnet.bastion.id
 }
 
-output "bastion_nsg_id" {
-  description = "ID der Bastion Network Security Group"
-  value       = azurerm_network_security_group.bastion.id
+output "azure_bastion_host_id" {
+  description = "ID des Azure Bastion Hosts"
+  value       = azurerm_bastion_host.nomad.id
+}
+
+output "azure_bastion_public_ip" {
+  description = "Public IP des Azure Bastion Services"
+  value       = azurerm_public_ip.bastion.ip_address
 }

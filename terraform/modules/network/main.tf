@@ -14,10 +14,10 @@ resource "azurerm_subnet" "cluster" {
 }
 
 resource "azurerm_subnet" "bastion" {
-  name                 = "${var.prefix}-bastion-subnet"
+  name                 = "AzureBastionSubnet"
   resource_group_name  = var.resource_group_name
   virtual_network_name = azurerm_virtual_network.nomad.name
-  address_prefixes     = ["10.0.20.0/24"]
+  address_prefixes     = ["10.0.20.0/27"]
 }
 
 resource "azurerm_network_security_group" "nomad_server" {
@@ -124,7 +124,7 @@ resource "azurerm_network_security_group" "nomad_client" {
   resource_group_name = var.resource_group_name
   tags                = var.tags
 
-  # SSH only from bastion subnet
+  # SSH von Azure Bastion Service
   security_rule {
     name                       = "SSH"
     priority                   = 100
@@ -133,7 +133,7 @@ resource "azurerm_network_security_group" "nomad_client" {
     protocol                   = "Tcp"
     source_port_range          = "*"
     destination_port_range     = "22"
-    source_address_prefix      = "10.0.20.0/24"
+    source_address_prefix      = "10.0.20.0/27" # AzureBastionSubnet
     destination_address_prefix = "*"
   }
 
@@ -190,35 +190,26 @@ resource "azurerm_network_security_group" "nomad_client" {
   }
 }
 
-resource "azurerm_network_security_group" "bastion" {
-  name                = "${var.prefix}-bastion-nsg"
+# Public IP für Azure Bastion
+resource "azurerm_public_ip" "bastion" {
+  name                = "${var.prefix}-bastion-ip"
+  location            = var.location
+  resource_group_name = var.resource_group_name
+  allocation_method   = "Static"
+  sku                 = "Standard"
+  tags                = var.tags
+}
+
+# Azure Bastion Service
+resource "azurerm_bastion_host" "nomad" {
+  name                = "${var.prefix}-bastion"
   location            = var.location
   resource_group_name = var.resource_group_name
   tags                = var.tags
 
-  # SSH from allowed IPs
-  security_rule {
-    name                       = "SSH"
-    priority                   = 100
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "Tcp"
-    source_port_range          = "*"
-    destination_port_range     = "22"
-    source_address_prefixes    = var.allowed_ssh_ips
-    destination_address_prefix = "*"
-  }
-
-  # Allow outbound SSH to VNet (for connecting to clients)
-  security_rule {
-    name                       = "SSHOutbound"
-    priority                   = 100
-    direction                  = "Outbound"
-    access                     = "Allow"
-    protocol                   = "Tcp"
-    source_port_range          = "*"
-    destination_port_range     = "22"
-    source_address_prefix      = "*"
-    destination_address_prefix = "VirtualNetwork"
+  ip_configuration {
+    name                 = "configuration"
+    subnet_id            = azurerm_subnet.bastion.id
+    public_ip_address_id = azurerm_public_ip.bastion.id
   }
 }

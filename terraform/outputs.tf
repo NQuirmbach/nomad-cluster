@@ -101,13 +101,18 @@ output "ansible_inventory" {
   value       = module.compute.ansible_inventory
 }
 
-# Bastion Host Outputs
-output "bastion_public_ip" {
-  description = "Public IP des Bastion Hosts"
-  value       = module.compute.bastion_public_ip
+# Azure Bastion Service Outputs
+output "azure_bastion_public_ip" {
+  description = "Public IP des Azure Bastion Services"
+  value       = module.network.azure_bastion_public_ip
 }
 
-output "bastion_ssh_command" {
-  description = "SSH Befehl zum Verbinden mit dem Bastion Host"
-  value       = "ssh azureuser@${module.compute.bastion_public_ip}"
+output "azure_bastion_host_id" {
+  description = "ID des Azure Bastion Hosts"
+  value       = module.network.azure_bastion_host_id
+}
+
+output "azure_bastion_access_info" {
+  description = "Information zum Zugriff auf VMs über Azure Bastion"
+  value       = "Zugriff auf VMs über Azure Portal > Virtual Machines > Connect > Bastion"
 }
