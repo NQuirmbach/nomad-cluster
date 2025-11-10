@@ -6,7 +6,7 @@ RESOURCE_GROUP="rg-nomad-cluster-dev"
 VMSS_NAME="nmdclstr-dev-client-vmss"
 BASTION_NAME="nmdclstr-dev-bastion"
 SSH_USER="azureuser"
-SSH_KEY="${SSH_KEY:-$HOME/.ssh/id_rsa}"
+SSH_KEY="${SSH_KEY:-$HOME/.ssh/nomad_cluster}"
 
 # Farben für die Ausgabe
 RED="\033[0;31m"
