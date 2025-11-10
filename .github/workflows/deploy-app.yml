@@ -150,19 +150,21 @@ jobs:
           sudo mv nomad /usr/local/bin/
           nomad version
 
-      - name: Get Nomad Server IP
+      - name: Get Load Balancer IP
         run: |
-          # Get first Nomad server from the resource group
-          SERVER_NAME=$(az vm list -g ${{ env.RESOURCE_GROUP }} --query "[?contains(name, 'nomad-server')].name | [0]" -o tsv)
+          # Get the Load Balancer IP
+          PREFIX="nomad-cluster"
+          ENV="${{ github.event.inputs.environment || 'dev' }}"
+          LB_NAME="${PREFIX}-${ENV}-lb"
+          LB_IP=$(az network public-ip show -g ${{ env.RESOURCE_GROUP }} --name "${LB_NAME}-ip" --query ipAddress -o tsv)
 
-          if [ -z "$SERVER_NAME" ]; then
-            echo "Error: No Nomad server found in resource group ${{ env.RESOURCE_GROUP }}"
+          if [ -z "$LB_IP" ]; then
+            echo "Error: Could not find Load Balancer IP in resource group ${{ env.RESOURCE_GROUP }}"
             exit 1
           fi
 
-          echo "Using Nomad server: $SERVER_NAME"
-          SERVER_IP=$(az vm show -d -g ${{ env.RESOURCE_GROUP }} -n $SERVER_NAME --query publicIps -o tsv)
-          echo "NOMAD_ADDR=http://${SERVER_IP}:4646" >> $GITHUB_ENV
+          echo "Using Load Balancer IP: $LB_IP"
+          echo "NOMAD_ADDR=http://${LB_IP}:4646" >> $GITHUB_ENV
 
       - name: Set Job File Path
         run: |
