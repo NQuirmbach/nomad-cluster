@@ -95,7 +95,7 @@ jobs:
         with:
           context: app
           push: true
-          tags: ${{ env.ACR_LOGIN_SERVER }}/nomad-app:${{ steps.set_image_tag.outputs.image_tag }}
+          tags: ${{ env.ACR_LOGIN_SERVER }}/server-info:${{ steps.set_image_tag.outputs.image_tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -176,26 +176,26 @@ jobs:
           echo "Using image tag: ${{ needs.build.outputs.image_tag }} for deployment"
 
       - name: Validate Job
-        run: nomad job validate -var="IMAGE_VERSION=${{ needs.build.outputs.image_tag }}" -var="ACR_NAME=${{ env.ACR_NAME }}" -var="IMAGE_NAME=nomad-app" ${{ env.JOB_FILE }}
+        run: nomad job validate -var="IMAGE_VERSION=${{ needs.build.outputs.image_tag }}" -var="ACR_NAME=${{ env.ACR_NAME }}" -var="IMAGE_NAME=server-info" ${{ env.JOB_FILE }}
 
       - name: Plan Job
-        run: nomad job plan -var="IMAGE_VERSION=${{ needs.build.outputs.image_tag }}" -var="ACR_NAME=${{ env.ACR_NAME }}" -var="IMAGE_NAME=nomad-app" ${{ env.JOB_FILE }}
+        run: nomad job plan -var="IMAGE_VERSION=${{ needs.build.outputs.image_tag }}" -var="ACR_NAME=${{ env.ACR_NAME }}" -var="IMAGE_NAME=server-info" ${{ env.JOB_FILE }}
 
       - name: Deploy Job
-        run: nomad job run -var="IMAGE_VERSION=${{ needs.build.outputs.image_tag }}" -var="ACR_NAME=${{ env.ACR_NAME }}" -var="IMAGE_NAME=nomad-app" ${{ env.JOB_FILE }}
+        run: nomad job run -var="IMAGE_VERSION=${{ needs.build.outputs.image_tag }}" -var="ACR_NAME=${{ env.ACR_NAME }}" -var="IMAGE_NAME=server-info" ${{ env.JOB_FILE }}
 
       - name: Verify Deployment
         run: |
-          JOB_NAME=$(nomad job inspect -var="IMAGE_VERSION=${{ needs.build.outputs.image_tag }}" -var="ACR_NAME=${{ env.ACR_NAME }}" -var="IMAGE_NAME=nomad-app" ${{ env.JOB_FILE }} | jq -r '.ID')
+          JOB_NAME=$(nomad job inspect -var="IMAGE_VERSION=${{ needs.build.outputs.image_tag }}" -var="ACR_NAME=${{ env.ACR_NAME }}" -var="IMAGE_NAME=server-info" ${{ env.JOB_FILE }} | jq -r '.ID')
           nomad job status $JOB_NAME
 
           echo "## Application Deployed!" >> $GITHUB_STEP_SUMMARY
           echo "- Job: $JOB_NAME" >> $GITHUB_STEP_SUMMARY
           echo "- Environment: ${{ env.NOMAD_ENV }}" >> $GITHUB_STEP_SUMMARY
           if [ -n "${{ needs.build.outputs.image_digest }}" ]; then
-            echo "- Image: ${{ env.ACR_LOGIN_SERVER }}/nomad-app:${{ needs.build.outputs.image_tag }}" >> $GITHUB_STEP_SUMMARY
+            echo "- Image: ${{ env.ACR_LOGIN_SERVER }}/server-info:${{ needs.build.outputs.image_tag }}" >> $GITHUB_STEP_SUMMARY
             echo "- Digest: ${{ needs.build.outputs.image_digest }}" >> $GITHUB_STEP_SUMMARY
           else
-            echo "- Using local image: nomad-app:${{ needs.build.outputs.image_tag }}" >> $GITHUB_STEP_SUMMARY
+            echo "- Using local image: server-info:${{ needs.build.outputs.image_tag }}" >> $GITHUB_STEP_SUMMARY
           fi
           echo "- Nomad UI: $NOMAD_ADDR/ui/jobs/$JOB_NAME" >> $GITHUB_STEP_SUMMARY

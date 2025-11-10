@@ -82,8 +82,9 @@ job "server-info-web" {
         image = "${var.ACR_NAME != "" ? "${var.ACR_NAME}.azurecr.io/" : ""}${var.IMAGE_NAME}:${var.IMAGE_VERSION}"
         ports = ["http"]
         
-        # ACR-Authentifizierung nur wenn ACR_NAME gesetzt ist
-        ${var.ACR_NAME != "" ? "auth {\n          helper = \"acr-env\"\n        }" : ""}
+        auth {
+          helper = "acr-env"
+        }
       }
     }
   }
