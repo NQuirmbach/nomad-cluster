@@ -179,6 +179,8 @@ jobs:
         run: nomad job validate -var="IMAGE_VERSION=${{ needs.build.outputs.image_tag }}" -var="ACR_NAME=${{ env.ACR_NAME }}" -var="IMAGE_NAME=server-info" ${{ env.JOB_FILE }}
 
       - name: Plan Job
+        continue-on-error: true
+        id: plan
         run: nomad job plan -var="IMAGE_VERSION=${{ needs.build.outputs.image_tag }}" -var="ACR_NAME=${{ env.ACR_NAME }}" -var="IMAGE_NAME=server-info" ${{ env.JOB_FILE }}
 
       - name: Deploy Job
