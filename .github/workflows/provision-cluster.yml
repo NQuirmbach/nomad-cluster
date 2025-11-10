@@ -186,14 +186,10 @@ jobs:
             ssh-keyscan -H $IP >> ~/.ssh/known_hosts 2>/dev/null || true
           done
 
-      - name: Wait for VMs
-        run: sleep 60
-
       - name: Run Ansible Playbooks
-        working-directory: ./ansible
         run: |
           export ANSIBLE_HOST_KEY_CHECKING=False
-          ansible-playbook -i ../inventory.ini playbooks/site.yml
+          ansible-playbook -i ansible/inventory.ini ansible/playbooks/site.yml
 
       - name: Azure Login with OIDC
         uses: azure/login@v1
