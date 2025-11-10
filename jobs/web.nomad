@@ -76,6 +76,9 @@ job "server-info-web" {
         # Dynamische Image-Auswahl: lokal oder aus ACR
         image = "${var.ACR_NAME != "" ? "${var.ACR_NAME}.azurecr.io/" : ""}${var.IMAGE_NAME}:${var.IMAGE_VERSION}"
         ports = ["http"]
+
+        auth {
+        }
       }
     }
   }

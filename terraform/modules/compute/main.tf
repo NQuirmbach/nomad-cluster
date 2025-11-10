@@ -244,8 +244,9 @@ resource "azurerm_linux_virtual_machine_scale_set" "nomad_client" {
               volumes {
                 enabled = true
               }
+              extra_labels = ["job_name", "job_id", "task_group", "task_name", "namespace", "node_name"]
               auth {
-                helper = "acr-env"
+                config = "/home/azureuser/.docker/config.json"
               }
             }
           }
@@ -294,6 +295,20 @@ resource "azurerm_linux_virtual_machine_scale_set" "nomad_client" {
       - systemctl enable docker
       - systemctl start docker
       - usermod -aG docker ubuntu
+      - echo "Installing Azure CLI for ACR authentication..."
+      - curl -sL https://aka.ms/InstallAzureCLIDeb | bash
+      - echo "Installing Docker credential helper for ACR..."
+      - mkdir -p /usr/local/bin
+      - wget -q https://github.com/chrismellard/docker-credential-acr-env/releases/download/v0.7.0/docker-credential-acr-env_0.7.0_linux_amd64.tar.gz -O /tmp/docker-credential-acr-env.tar.gz
+      - tar -xzf /tmp/docker-credential-acr-env.tar.gz -C /tmp
+      - mv /tmp/docker-credential-acr-env /usr/local/bin/
+      - chmod +x /usr/local/bin/docker-credential-acr-env
+      - echo "Configuring Docker credential helper..."
+      - mkdir -p /home/azureuser/.docker
+      - echo '{"credsStore": "acr-env"}' > /home/azureuser/.docker/config.json
+      - chown -R azureuser:azureuser /home/azureuser/.docker
+      - mkdir -p /root/.docker
+      - echo '{"credsStore": "acr-env"}' > /root/.docker/config.json
       - echo "Enabling and starting Nomad client..."
       - systemctl daemon-reload
       - systemctl enable nomad-client

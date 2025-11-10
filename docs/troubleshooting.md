@@ -210,6 +210,47 @@ nomad agent -config=/etc/nomad.d -validate
    - Verwende bedingte Logik, um Exit-Code 1 als erfolgreich zu behandeln
    - Oder verwende `|| true` am Ende des Befehls, um Fehler zu ignorieren
 
+### ACR-Authentifizierung mit Managed Identity
+
+1. Problem:
+   - Fehler: `Driver Failure: Failed to find docker auth for repo "acr-name.azurecr.io/image": exec: "docker-credential-acr-env": executable file not found in $PATH`
+   - Dies bedeutet, dass der Docker-Credential-Helper für ACR nicht installiert ist
+
+2. Lösung:
+   - Installiere den Docker-Credential-Helper auf den Nomad-Client-Nodes:
+   ```bash
+   # Installiere den Docker-Credential-Helper
+   wget -q https://github.com/chrismellard/docker-credential-acr-env/releases/download/v0.7.0/docker-credential-acr-env_0.7.0_linux_amd64.tar.gz
+   tar -xzf docker-credential-acr-env_0.7.0_linux_amd64.tar.gz
+   sudo mv docker-credential-acr-env /usr/local/bin/
+   sudo chmod +x /usr/local/bin/docker-credential-acr-env
+   
+   # Konfiguriere Docker
+   mkdir -p ~/.docker
+   echo '{"credsStore": "acr-env"}' > ~/.docker/config.json
+   ```
+
+3. Nomad-Konfiguration:
+   - Stelle sicher, dass die Docker-Plugin-Konfiguration korrekt ist:
+   ```hcl
+   plugin "docker" {
+     config {
+       auth {
+         config = "/home/azureuser/.docker/config.json"
+       }
+     }
+   }
+   ```
+
+4. Job-Konfiguration:
+   - Verwende einen leeren Auth-Block im Job:
+   ```hcl
+   config {
+     image = "acr-name.azurecr.io/image:tag"
+     auth {}
+   }
+   ```
+
 ## Nützliche Ressourcen
 
 - [Nomad Dokumentation](https://www.nomadproject.io/docs)
