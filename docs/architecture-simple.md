@@ -63,6 +63,11 @@ Diese vereinfachte Architektur fokussiert sich auf schnelles Setup via GitHub Ac
   - Kein direkter Internet-Zugriff
   - Kommunikation über VNet intern
 - **Scaling**: Azure Virtual Machine Scale Sets (VMSS)
+- **Konfiguration**: Cloud-Init (automatisch beim Boot)
+  - Installiert Nomad Client
+  - Konfiguriert Verbindung zu Servern
+  - Startet Nomad Service
+  - Kein Ansible-Zugriff nötig
 
 #### Consul (Optional, aber empfohlen)
 
@@ -91,6 +96,30 @@ Diese vereinfachte Architektur fokussiert sich auf schnelles Setup via GitHub Ac
 - ✅ Multi-Server HA (3 Server für Consensus)
 - ✅ VMSS Auto-Scaling für Client Nodes
 - ✅ Log Analytics Workspace (für zentrales Logging)
+
+## Konfigurationsmethodik
+
+Die Cluster-Komponenten werden über verschiedene Methoden konfiguriert:
+
+### Server-Konfiguration
+- **Methode**: Ansible über GitHub Actions
+- **Zugriff**: SSH über Load Balancer NAT Rules (Ports 50001-50003)
+- **Playbooks**: 
+  - `common.yml`: Basis-Setup für alle Nodes
+  - `consul.yml`: Consul Server Installation und Konfiguration
+  - `nomad-server.yml`: Nomad Server Installation und Konfiguration
+
+### Client-Konfiguration
+- **Methode**: Cloud-Init (automatisch beim VM-Start)
+- **Vorteile**:
+  - Kein SSH-Zugriff erforderlich
+  - Skaliert automatisch mit VMSS
+  - Parallele Konfiguration aller Instances
+  - Keine Abhängigkeit von externem Zugriff
+- **Komponenten**:
+  - Nomad Client Installation
+  - Systemd Service Konfiguration
+  - Verbindung zu Servern über Load Balancer
 
 ## Architektur-Diagramm (Simplified)
 

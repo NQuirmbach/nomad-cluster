@@ -206,6 +206,77 @@ resource "azurerm_linux_virtual_machine_scale_set" "nomad_client" {
   boot_diagnostics {
     storage_account_uri = null
   }
+
+  # Cloud-Init für Client-Konfiguration
+  custom_data = base64encode(<<-EOF
+    #cloud-config
+    package_update: true
+    package_upgrade: true
+    packages:
+      - unzip
+      - wget
+      - curl
+      - jq
+
+    write_files:
+      - path: /etc/nomad.d/client.hcl
+        content: |
+          data_dir  = "/opt/nomad/data"
+          bind_addr = "0.0.0.0"
+          
+          client {
+            enabled = true
+            servers = ["${azurerm_public_ip.lb.ip_address}:4647"]
+            network_interface = "eth0"
+          }
+          
+          datacenter = "${var.datacenter}"
+          region     = "global"
+          
+          log_level = "INFO"
+          log_file  = "/var/log/nomad.log"
+        
+      - path: /etc/systemd/system/nomad-client.service
+        content: |
+          [Unit]
+          Description=Nomad Client
+          Documentation=https://nomadproject.io/docs/
+          Wants=network-online.target
+          After=network-online.target
+
+          [Service]
+          ExecReload=/bin/kill -HUP $MAINPID
+          ExecStart=/usr/local/bin/nomad agent -config /etc/nomad.d
+          KillMode=process
+          KillSignal=SIGINT
+          LimitNOFILE=65536
+          LimitNPROC=infinity
+          Restart=on-failure
+          RestartSec=2
+          StartLimitBurst=3
+          StartLimitIntervalSec=10
+          TasksMax=infinity
+
+          [Install]
+          WantedBy=multi-user.target
+
+    runcmd:
+      - mkdir -p /opt/nomad/data /etc/nomad.d /var/log
+      - echo "Downloading Nomad ${var.nomad_version}..."
+      - wget -q https://releases.hashicorp.com/nomad/${var.nomad_version}/nomad_${var.nomad_version}_linux_amd64.zip -O /tmp/nomad.zip
+      - unzip /tmp/nomad.zip -d /usr/local/bin
+      - chmod +x /usr/local/bin/nomad
+      - rm /tmp/nomad.zip
+      - echo "Creating nomad user..."
+      - useradd --system --home /etc/nomad.d --shell /bin/false nomad
+      - chown -R nomad:nomad /opt/nomad /etc/nomad.d /var/log/nomad.log
+      - echo "Enabling and starting Nomad client..."
+      - systemctl daemon-reload
+      - systemctl enable nomad-client
+      - systemctl start nomad-client
+      - echo "Nomad client setup completed!"
+  EOF
+  )
 }
 
 

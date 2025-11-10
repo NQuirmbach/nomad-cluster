@@ -29,7 +29,6 @@ output "nomad_client_vmss_id" {
 }
 
 
-# Diese Funktion generiert ein Ansible Inventory basierend auf den Server- und Client-VMs
 locals {
   inventory = <<-EOT
 [nomad_servers]
@@ -38,9 +37,7 @@ ${azurerm_linux_virtual_machine.nomad_server[i].name} ansible_host=${azurerm_pub
 %{endfor~}
 
 [nomad_clients]
-%{for i in range(var.client_count)~}
-${var.prefix}-client-${i} ansible_host=${azurerm_linux_virtual_machine_scale_set.nomad_client.id}
-%{endfor~}
+# Clients werden via Cloud-Init konfiguriert
 
 [all:vars]
 ansible_user=azureuser
