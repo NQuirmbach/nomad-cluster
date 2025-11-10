@@ -214,41 +214,48 @@ nomad agent -config=/etc/nomad.d -validate
 
 1. Problem:
    - Fehler: `Driver Failure: Failed to find docker auth for repo "acr-name.azurecr.io/image": exec: "docker-credential-acr-env": executable file not found in $PATH`
-   - Dies bedeutet, dass der Docker-Credential-Helper für ACR nicht installiert ist
+   - Dies bedeutet, dass die Authentifizierung mit Azure Container Registry nicht korrekt eingerichtet ist
 
-2. Lösung:
-   - Installiere den Docker-Credential-Helper auf den Nomad-Client-Nodes:
+2. Lösung mit Azure CLI:
+   - Installiere die Azure CLI auf den Nomad-Client-Nodes:
    ```bash
-   # Installiere den Docker-Credential-Helper
-   wget -q https://github.com/chrismellard/docker-credential-acr-env/releases/download/v0.7.0/docker-credential-acr-env_0.7.0_linux_amd64.tar.gz
-   tar -xzf docker-credential-acr-env_0.7.0_linux_amd64.tar.gz
-   sudo mv docker-credential-acr-env /usr/local/bin/
-   sudo chmod +x /usr/local/bin/docker-credential-acr-env
+   # Installiere die Azure CLI
+   curl -sL https://aka.ms/InstallAzureCLIDeb | bash
    
-   # Konfiguriere Docker
-   mkdir -p ~/.docker
-   echo '{"credsStore": "acr-env"}' > ~/.docker/config.json
+   # Konfiguriere die VM-Managed-Identity für ACR
+   az login --identity
+   
+   # Teste die ACR-Authentifizierung
+   az acr login --name <acr-name>
    ```
 
-3. Nomad-Konfiguration:
-   - Stelle sicher, dass die Docker-Plugin-Konfiguration korrekt ist:
+3. Terraform-Konfiguration:
+   - Stelle sicher, dass die RBAC-Rolle für ACR Pull korrekt zugewiesen ist:
    ```hcl
-   plugin "docker" {
-     config {
-       auth {
-         config = "/home/azureuser/.docker/config.json"
-       }
-     }
+   resource "azurerm_role_assignment" "nomad_client_acr_pull" {
+     scope                = var.acr_id
+     role_definition_name = "AcrPull"
+     principal_id         = azurerm_linux_virtual_machine_scale_set.nomad_client.identity[0].principal_id
    }
    ```
 
-4. Job-Konfiguration:
-   - Verwende einen leeren Auth-Block im Job:
+4. Nomad-Job-Konfiguration:
+   - Verwende eine einfache Docker-Konfiguration ohne Auth-Block:
    ```hcl
    config {
      image = "acr-name.azurecr.io/image:tag"
-     auth {}
+     ports = ["http"]
    }
+   ```
+
+5. Fehlersuche:
+   - Überprüfe die Nomad-Client-Logs:
+   ```bash
+   sudo journalctl -u nomad-client -f
+   ```
+   - Überprüfe die Docker-Logs:
+   ```bash
+   sudo journalctl -u docker -f
    ```
 
 ## Nützliche Ressourcen

@@ -246,7 +246,7 @@ resource "azurerm_linux_virtual_machine_scale_set" "nomad_client" {
               }
               extra_labels = ["job_name", "job_id", "task_group", "task_name", "namespace", "node_name"]
               auth {
-                config = "/home/azureuser/.docker/config.json"
+                helper = "acr-login"
               }
             }
           }
@@ -297,18 +297,15 @@ resource "azurerm_linux_virtual_machine_scale_set" "nomad_client" {
       - usermod -aG docker ubuntu
       - echo "Installing Azure CLI for ACR authentication..."
       - curl -sL https://aka.ms/InstallAzureCLIDeb | bash
-      - echo "Installing Docker credential helper for ACR..."
+      - echo "Creating Docker credential helper for ACR..."
       - mkdir -p /usr/local/bin
-      - wget -q https://github.com/chrismellard/docker-credential-acr-env/releases/download/v0.7.0/docker-credential-acr-env_0.7.0_linux_amd64.tar.gz -O /tmp/docker-credential-acr-env.tar.gz
-      - tar -xzf /tmp/docker-credential-acr-env.tar.gz -C /tmp
-      - mv /tmp/docker-credential-acr-env /usr/local/bin/
-      - chmod +x /usr/local/bin/docker-credential-acr-env
-      - echo "Configuring Docker credential helper..."
-      - mkdir -p /home/azureuser/.docker
-      - echo '{"credsStore": "acr-env"}' > /home/azureuser/.docker/config.json
-      - chown -R azureuser:azureuser /home/azureuser/.docker
-      - mkdir -p /root/.docker
-      - echo '{"credsStore": "acr-env"}' > /root/.docker/config.json
+      - echo '#!/bin/bash
+az acr login --name "$1" --expose-token | jq -r ".accessToken"' > /usr/local/bin/docker-credential-acr-login
+      - chmod +x /usr/local/bin/docker-credential-acr-login
+      - echo "Configuring Docker for ACR authentication..."
+      - mkdir -p /etc/docker
+      - echo '{"log-driver": "json-file", "log-opts": {"max-size": "10m", "max-file": "3"}}' > /etc/docker/daemon.json
+      - systemctl restart docker
       - echo "Enabling and starting Nomad client..."
       - systemctl daemon-reload
       - systemctl enable nomad-client
