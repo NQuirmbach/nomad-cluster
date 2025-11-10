@@ -33,6 +33,16 @@ tasks:
       - cd app && task build IMAGE_VERSION={{.TIMESTAMP}}
       - nomad job run -var IMAGE_VERSION={{.TIMESTAMP}} jobs/web.nomad.hcl
 
+  ssh:
+    desc: Connect to a Nomad server via SSH
+    vars:
+      SERVER: "{{.SERVER | default 1}}"
+      LB_IP: 51.137.124.4
+    cmds:
+      - |
+        echo "Connecting to Nomad server {{.SERVER}} at {{.LB_IP}}..."
+        ssh -i ~/.ssh/nomad_cluster -p 5000{{.SERVER}} azureuser@{{.LB_IP}}
+
   default:
     desc: List all available tasks
     cmds:

@@ -16,10 +16,6 @@ server {
   
   # Automatische Bereinigung von toten Clients
   node_gc_threshold = "5m"
-  dead_server_cleanup {
-    enabled = true
-    interval = "60s"
-  }
 }
 
 client {
@@ -33,6 +29,13 @@ consul {
   auto_advertise = true
   server_auto_join = true
   client_auto_join = true
+}
+
+autopilot {
+  cleanup_dead_servers = true
+  last_contact_threshold = "200ms"
+  max_trailing_logs = 250
+  server_stabilization_time = "10s"
 }
 
 telemetry {
