@@ -480,6 +480,102 @@ nomad agent -config=/etc/nomad.d -validate
    - Teste das Script in einer separaten VM, bevor es in der Produktion eingesetzt wird
    - Verwende `set -e` in Shell-Skripten, um bei Fehlern abzubrechen
 
+### Docker-Treiber ist deaktiviert (disabled)
+
+1. Problem:
+   - Der Docker-Treiber wird in Nomad als "disabled" angezeigt
+   - Jobs mit Docker-Tasks können nicht ausgeführt werden
+
+2. Diagnose:
+   ```bash
+   # Überprüfe den Status des Docker-Treibers
+   nomad node status -self -verbose | grep -A 10 "Docker Driver"
+   
+   # Überprüfe die Nomad-Client-Logs nach Docker-Fehlern
+   sudo journalctl -u nomad-client | grep -i docker
+   ```
+
+3. Häufige Fehlermeldungen und Lösungen:
+
+   a) **Berechtigungsproblem mit Docker-Socket**:
+   ```
+   "permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock"
+   ```
+   
+   Lösung:
+   ```bash
+   # Docker-Socket-Berechtigungen ändern
+   sudo chmod 666 /var/run/docker.sock
+   
+   # Oder den Nomad-Benutzer zur Docker-Gruppe hinzufügen
+   sudo usermod -aG docker nomad
+   sudo systemctl restart nomad-client
+   ```
+
+   b) **Nomad läuft nicht als Root**:
+   ```
+   "docker driver requires running as root: resources.cores and NUMA-aware scheduling will not function correctly"
+   ```
+   
+   Lösung:
+   ```bash
+   # Bearbeite die Nomad-Client-Service-Datei
+   sudo nano /etc/systemd/system/nomad-client.service
+   
+   # Ändere die Benutzer- und Gruppeneinstellungen
+   # User=nomad
+   # Group=nomad
+   # zu
+   # User=root
+   # Group=root
+   
+   # Starte den Dienst neu
+   sudo systemctl daemon-reload
+   sudo systemctl restart nomad-client
+   ```
+
+   c) **Docker ist nicht installiert oder läuft nicht**:
+   
+   Lösung:
+   ```bash
+   # Überprüfe, ob Docker installiert ist
+   which docker
+   
+   # Überprüfe den Docker-Dienststatus
+   sudo systemctl status docker
+   
+   # Starte Docker, falls es nicht läuft
+   sudo systemctl start docker
+   sudo systemctl enable docker
+   ```
+
+   d) **Falsche Docker-Plugin-Konfiguration in Nomad**:
+   
+   Lösung:
+   ```bash
+   # Überprüfe die Nomad-Client-Konfiguration
+   cat /etc/nomad.d/client.hcl | grep -A 20 "plugin \"docker\""
+   
+   # Stelle sicher, dass der Docker-Plugin-Block korrekt ist
+   # plugin "docker" {
+   #   config {
+   #     allow_privileged = true
+   #     volumes {
+   #       enabled = true
+   #     }
+   #   }
+   # }
+   ```
+
+4. Nach der Behebung:
+   ```bash
+   # Starte den Nomad-Client neu
+   sudo systemctl restart nomad-client
+   
+   # Überprüfe den Status des Docker-Treibers
+   nomad node status -self -verbose | grep -A 10 "Docker Driver"
+   ```
+
 ## Nützliche Ressourcen
 
 - [Nomad Dokumentation](https://www.nomadproject.io/docs)

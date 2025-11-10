@@ -1,0 +1,144 @@
+#cloud-config
+package_update: true
+package_upgrade: true
+packages:
+  - unzip
+  - wget
+  - curl
+  - jq
+  - apt-transport-https
+  - ca-certificates
+  - gnupg
+  - docker.io
+
+write_files:
+  # Nomad Client Konfiguration
+  - path: /etc/nomad.d/client.hcl
+    owner: root:root
+    permissions: '0644'
+    content: |
+      data_dir  = "/opt/nomad/data"
+      bind_addr = "0.0.0.0"
+      
+      client {
+        enabled = true
+        servers = [
+%{ for ip in server_ips ~}
+          "${ip}:4647",
+%{ endfor ~}
+        ]
+        network_interface = "eth0"
+      }
+      
+      # Docker-Treiber aktivieren
+      plugin "docker" {
+        config {
+          allow_privileged = true
+          volumes {
+            enabled = true
+          }
+          extra_labels = ["job_name", "job_id", "task_group", "task_name", "namespace", "node_name"]
+          
+          # ACR-Authentifizierung auf Client-Ebene
+          auth {
+            # Verwende die ACR-Admin-Credentials
+            config = "/etc/docker/config.json"
+          }
+        }
+      }
+      
+      datacenter = "${datacenter}"
+      region     = "global"
+      
+      log_level = "INFO"
+      log_file  = "/var/log/nomad.log"
+      
+      telemetry {
+        publish_allocation_metrics = true
+        publish_node_metrics = true
+        prometheus_metrics = true
+      }
+    
+  # Nomad systemd service
+  - path: /etc/systemd/system/nomad-client.service
+    content: |
+      [Unit]
+      Description=Nomad Client
+      Documentation=https://nomadproject.io/docs/
+      Wants=network-online.target
+      After=network-online.target
+
+      [Service]
+      # Läuft als Root für Docker-Zugriff
+      User=root
+      Group=root
+      ExecStart=/usr/local/bin/nomad agent -config=/etc/nomad.d
+      ExecReload=/bin/kill -HUP $MAINPID
+      KillMode=process
+      Restart=on-failure
+      RestartSec=2
+      LimitNOFILE=65536
+      LimitNPROC=infinity
+      Restart=on-failure
+      RestartSec=2
+      StartLimitBurst=3
+      StartLimitIntervalSec=10
+      TasksMax=infinity
+
+      [Install]
+      WantedBy=multi-user.target
+  
+  # Docker config.json template
+  - path: /etc/docker/config.json.template
+    owner: root:root
+    permissions: '0600'
+    content: |
+      {
+        "auths": {
+          "${acr_login_server}": {
+            "auth": "CREDENTIALS_PLACEHOLDER"
+          }
+        }
+      }
+
+runcmd:
+  # Minimal logging
+  - echo "Nomad client setup starting" > /var/log/nomad-setup.log
+
+  # Create directories
+  - mkdir -p /opt/nomad/data /etc/nomad.d /var/log
+  - touch /var/log/nomad.log
+  - chmod 755 /opt/nomad /etc/nomad.d
+  - chmod 644 /var/log/nomad.log
+
+  # Download and install Nomad
+  - wget -q https://releases.hashicorp.com/nomad/${nomad_version}/nomad_${nomad_version}_linux_amd64.zip -O /tmp/nomad.zip
+  - unzip -o /tmp/nomad.zip -d /usr/local/bin
+  - chmod +x /usr/local/bin/nomad
+  - rm /tmp/nomad.zip
+
+  # Configure Docker and ACR auth
+  - systemctl enable docker
+  - systemctl start docker
+  - mkdir -p /etc/docker /root/.docker /home/azureuser/.docker
+  - ENCODED_AUTH=$(echo -n "${acr_admin_username}:${acr_admin_password}" | base64 -w0)
+  - echo '{"auths":{"'${acr_login_server}'":{"auth":"'"$ENCODED_AUTH"'"}}}' > /etc/docker/config.json
+  - echo '{"auths":{"'${acr_login_server}'":{"auth":"'"$ENCODED_AUTH"'"}}}' > /root/.docker/config.json
+  - echo '{"auths":{"'${acr_login_server}'":{"auth":"'"$ENCODED_AUTH"'"}}}' > /home/azureuser/.docker/config.json
+  - chmod 644 /etc/docker/config.json
+  - chmod 600 /root/.docker/config.json /home/azureuser/.docker/config.json
+  - chown azureuser:azureuser /home/azureuser/.docker/config.json
+  - systemctl restart docker
+
+  # Validate Nomad config and ensure basic permissions
+  - nomad version >> /var/log/nomad-setup.log 2>&1 || true
+  - chmod 644 /etc/nomad.d/client.hcl
+
+  # Start Nomad client service
+  - systemctl daemon-reload
+  - systemctl enable nomad-client
+  - systemctl start nomad-client
+
+  # Final status
+  - systemctl is-active --quiet nomad-client && echo "Nomad client active" >> /var/log/nomad-setup.log || echo "Nomad client not active" >> /var/log/nomad-setup.log
+  - echo "Nomad client setup finished" >> /var/log/nomad-setup.log
