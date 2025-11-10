@@ -123,6 +123,48 @@ resource "azurerm_lb_rule" "consul_ui" {
   probe_id                       = azurerm_lb_probe.consul.id
 }
 
+# Health Probe für Traefik HTTP
+resource "azurerm_lb_probe" "traefik_http" {
+  name            = "traefik-http-probe"
+  loadbalancer_id = azurerm_lb.nomad.id
+  protocol        = "Http"
+  port            = 8080
+  request_path    = "/ping"
+}
+
+# Load Balancer Rule für Traefik HTTP
+resource "azurerm_lb_rule" "traefik_http" {
+  name                           = "traefik-http"
+  loadbalancer_id                = azurerm_lb.nomad.id
+  protocol                       = "Tcp"
+  frontend_port                  = 80
+  backend_port                   = 8080
+  frontend_ip_configuration_name = "PublicIPAddress"
+  backend_address_pool_ids       = [azurerm_lb_backend_address_pool.nomad_servers.id]
+  probe_id                       = azurerm_lb_probe.traefik_http.id
+}
+
+# Health Probe für Traefik Dashboard
+resource "azurerm_lb_probe" "traefik_dashboard" {
+  name            = "traefik-dashboard-probe"
+  loadbalancer_id = azurerm_lb.nomad.id
+  protocol        = "Http"
+  port            = 8081
+  request_path    = "/ping"
+}
+
+# Load Balancer Rule für Traefik Dashboard
+resource "azurerm_lb_rule" "traefik_dashboard" {
+  name                           = "traefik-dashboard"
+  loadbalancer_id                = azurerm_lb.nomad.id
+  protocol                       = "Tcp"
+  frontend_port                  = 8081
+  backend_port                   = 8081
+  frontend_ip_configuration_name = "PublicIPAddress"
+  backend_address_pool_ids       = [azurerm_lb_backend_address_pool.nomad_servers.id]
+  probe_id                       = azurerm_lb_probe.traefik_dashboard.id
+}
+
 # Inbound NAT Rules für SSH (ein Port pro Server)
 resource "azurerm_lb_nat_rule" "ssh" {
   count                          = var.server_count

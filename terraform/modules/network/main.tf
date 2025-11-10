@@ -116,6 +116,32 @@ resource "azurerm_network_security_group" "nomad_server" {
     source_address_prefix      = "VirtualNetwork"
     destination_address_prefix = "*"
   }
+
+  # Traefik HTTP
+  security_rule {
+    name                       = "TraefikHTTP"
+    priority                   = 170
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "8080"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+
+  # Traefik Dashboard
+  security_rule {
+    name                       = "TraefikDashboard"
+    priority                   = 180
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "8081"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
 }
 
 resource "azurerm_network_security_group" "nomad_client" {
@@ -185,6 +211,32 @@ resource "azurerm_network_security_group" "nomad_client" {
     protocol                   = "*"
     source_port_range          = "*"
     destination_port_range     = "30000-32000"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+
+  # Traefik HTTP
+  security_rule {
+    name                       = "TraefikHTTP"
+    priority                   = 150
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "8080"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+
+  # Traefik Dashboard
+  security_rule {
+    name                       = "TraefikDashboard"
+    priority                   = 160
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "8081"
     source_address_prefix      = "*"
     destination_address_prefix = "*"
   }

@@ -13,6 +13,7 @@ Diese vereinfachte Architektur fokussiert sich auf schnelles Setup via GitHub Ac
 - **Address Space**: 10.0.0.0/16
 - **Subnets**:
   - **Cluster Subnet**: 10.0.10.0/24 (Server + Client Nodes)
+  - **Bastion Subnet**: 10.0.20.0/27 (Azure Bastion Service)
 
 #### Load Balancer
 
@@ -85,8 +86,7 @@ Diese vereinfachte Architektur fokussiert sich auf schnelles Setup via GitHub Ac
 **Weggelassen**:
 
 - ❌ Availability Zones (Single Zone)
-- ❌ Separate Subnets (ein Cluster Subnet)
-- ❌ Azure Bastion (SSH via Load Balancer NAT)
+- ❌ Separate Subnets für Server und Clients (ein gemeinsames Cluster Subnet)
 - ❌ NAT Gateway (Clients ohne Internet-Zugriff)
 
 **Implementiert**:
@@ -102,6 +102,7 @@ Diese vereinfachte Architektur fokussiert sich auf schnelles Setup via GitHub Ac
 - ✅ Multi-Server HA (3 Server für Consensus)
 - ✅ VMSS Auto-Scaling für Client Nodes
 - ✅ Log Analytics Workspace (für zentrales Logging)
+- ✅ Azure Bastion Service (für sicheren SSH-Zugriff)
 
 ## Konfigurationsmethodik
 
@@ -109,7 +110,9 @@ Die Cluster-Komponenten werden über verschiedene Methoden konfiguriert:
 
 ### Server-Konfiguration
 - **Methode**: Ansible über GitHub Actions
-- **Zugriff**: SSH über Load Balancer NAT Rules (Ports 50001-50003)
+- **Zugriff**: 
+  - SSH über Load Balancer NAT Rules (Ports 50001-50003)
+  - SSH über Azure Bastion Service (sicherer)
 - **Playbooks**: 
   - `common.yml`: Basis-Setup für alle Nodes
   - `consul.yml`: Consul Server Installation und Konfiguration
@@ -168,6 +171,16 @@ Die Cluster-Komponenten werden über verschiedene Methoden konfiguriert:
 │  │  │  │  Clients     │                      │  │ │
 │  │  │  │ (Auto-Scale) │                      │  │ │
 │  │  │  └──────────────┘                      │  │ │
+│  │  │                                          │  │ │
+│  │  └──────────────────────────────────────────┘  │ │
+│  │                                                 │ │
+│  │  ┌──────────────────────────────────────────┐  │ │
+│  │  │    Bastion Subnet (10.0.20.0/27)        │  │ │
+│  │  │                                          │  │ │
+│  │  │  ┌──────────────────────────┐           │  │ │
+│  │  │  │ Azure Bastion Service    │           │  │ │
+│  │  │  │ (Secure SSH Access)      │           │  │ │
+│  │  │  └──────────────────────────┘           │  │ │
 │  │  │                                          │  │ │
 │  │  └──────────────────────────────────────────┘  │ │
 │  └─────────────────────────────────────────────────┘ │
@@ -288,12 +301,13 @@ ansible/
 - **3x Nomad Server** (Standard_B2s): ~€90
 - **2-4x Nomad Client** (Standard_B2ms via VMSS): ~€60-120
 - **Load Balancer** (Standard): ~€20
-- **Networking** (VNet, NSG, 1 Public IP): ~€5
+- **Azure Bastion Service** (Standard): ~€150
+- **Networking** (VNet, NSG, 2 Public IPs): ~€10
 - **Storage** (Standard SSD): ~€25
 - **Key Vault**: ~€5
 - **Log Analytics Workspace**: ~€10
 - **Terraform State Storage**: ~€2
-- **Gesamt**: **~€200-260/Monat**
+- **Gesamt**: **~€350-410/Monat**
 
 **Kosteneinsparung durch Load Balancer**: ~€10/Monat (weniger Public IPs)
 
@@ -372,10 +386,19 @@ export NOMAD_ADDR=http://<server-public-ip>:4646
 nomad status
 ```
 
-### SSH Access (Testing)
+### SSH Access
 
+**Option 1: Load Balancer NAT Rules**
 ```bash
-ssh -i ~/.ssh/nomad-cluster-key azureuser@<server-public-ip>
+ssh -i ~/.ssh/nomad-cluster-key azureuser@<load-balancer-ip> -p 5000X
+```
+Wobei X = 1, 2 oder 3 für die jeweilige Server-Instanz.
+
+**Option 2: Azure Bastion (empfohlen)**
+
+Über das Azure Portal oder die Azure CLI:
+```bash
+az network bastion ssh --name <bastion-name> --resource-group <resource-group> --target-resource-id <vm-resource-id> --auth-type ssh-key --username azureuser --ssh-key ~/.ssh/nomad-cluster-key
 ```
 
 ## Upgrade Path zu Production
