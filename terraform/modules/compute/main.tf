@@ -248,6 +248,12 @@ resource "azurerm_linux_virtual_machine_scale_set" "nomad_client" {
                 enabled = true
               }
               extra_labels = ["job_name", "job_id", "task_group", "task_name", "namespace", "node_name"]
+              
+              # ACR-Authentifizierung auf Client-Ebene
+              auth {
+                # Verwende die ACR-Admin-Credentials
+                config = "/etc/docker/config.json"
+              }
             }
           }
           
@@ -263,6 +269,7 @@ resource "azurerm_linux_virtual_machine_scale_set" "nomad_client" {
             prometheus_metrics = true
           }
         
+      # Nomad systemd service
       - path: /etc/systemd/system/nomad-client.service
         content: |
           [Unit]
@@ -272,10 +279,13 @@ resource "azurerm_linux_virtual_machine_scale_set" "nomad_client" {
           After=network-online.target
 
           [Service]
+          User=nomad
+          Group=nomad
+          ExecStart=/usr/local/bin/nomad agent -config=/etc/nomad.d
           ExecReload=/bin/kill -HUP $MAINPID
-          ExecStart=/usr/local/bin/nomad agent -config /etc/nomad.d
           KillMode=process
-          KillSignal=SIGINT
+          Restart=on-failure
+          RestartSec=2
           LimitNOFILE=65536
           LimitNPROC=infinity
           Restart=on-failure
@@ -286,87 +296,69 @@ resource "azurerm_linux_virtual_machine_scale_set" "nomad_client" {
 
           [Install]
           WantedBy=multi-user.target
-
-    # Installation und Konfiguration als Shell-Script
-      - path: /opt/setup-nomad.sh
+      
+      # Docker config.json template
+      - path: /etc/docker/config.json.template
         owner: root:root
-        permissions: '0755'
+        permissions: '0600'
         content: |
-          #!/bin/bash
-          set -ex
-          
-          # Logging-Funktion
-          log() {
-            echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a /var/log/nomad-setup.log
+          {
+            "auths": {
+              "${var.acr_login_server}": {
+                "auth": "CREDENTIALS_PLACEHOLDER"
+              }
+            }
           }
-          
-          log "Starting Nomad client setup"
-          
-          # Verzeichnisse erstellen
-          log "Creating directories"
-          mkdir -p /opt/nomad/data /etc/nomad.d /var/log
-          
-          # Nomad herunterladen und installieren
-          log "Downloading Nomad ${var.nomad_version}"
-          wget -q https://releases.hashicorp.com/nomad/${var.nomad_version}/nomad_${var.nomad_version}_linux_amd64.zip -O /tmp/nomad.zip
-          if [ $? -ne 0 ]; then
-            log "ERROR: Failed to download Nomad"
-            exit 1
-          fi
-          
-          log "Installing Nomad"
-          unzip -o /tmp/nomad.zip -d /usr/local/bin
-          chmod +x /usr/local/bin/nomad
-          rm /tmp/nomad.zip
-          
-          # Nomad-Benutzer erstellen
-          log "Creating nomad user"
-          id -u nomad &>/dev/null || useradd --system --home /etc/nomad.d --shell /bin/false nomad
-          touch /var/log/nomad.log
-          chown -R nomad:nomad /opt/nomad /etc/nomad.d /var/log/nomad.log
-          
-          # Docker konfigurieren
-          log "Configuring Docker"
-          systemctl enable docker
-          systemctl start docker
-          usermod -aG docker azureuser
-          
-          # Docker-Daemon konfigurieren
-          log "Setting up Docker daemon configuration"
-          mkdir -p /etc/docker
-          echo '{"log-driver": "json-file", "log-opts": {"max-size": "10m", "max-file": "3"}}' > /etc/docker/daemon.json
-          systemctl restart docker
-          
-          # ACR-Login
-          log "Logging into ACR with admin credentials"
-          docker login ${var.acr_login_server} -u ${var.acr_admin_username} -p ${var.acr_admin_password}
-          if [ $? -ne 0 ]; then
-            log "WARNING: Failed to login to ACR, but continuing"
-          fi
-          
-          # Nomad-Client-Service aktivieren und starten
-          log "Enabling and starting Nomad client"
-          systemctl daemon-reload
-          systemctl enable nomad-client
-          systemctl start nomad-client
-          
-          # Überprüfen, ob Nomad läuft
-          sleep 5
-          if systemctl is-active --quiet nomad-client; then
-            log "Nomad client is running successfully"
-          else
-            log "ERROR: Nomad client failed to start"
-            journalctl -u nomad-client -n 50 >> /var/log/nomad-setup.log
-          fi
-          
-          log "Nomad client setup completed"
-          exit 0
 
     runcmd:
-      # Führe das Setup-Script aus und protokolliere die Ausgabe
-      - echo "Starting Nomad setup script" > /var/log/nomad-setup.log
-      - chmod +x /opt/setup-nomad.sh
-      - /opt/setup-nomad.sh >> /var/log/nomad-setup.log 2>&1 || echo "Setup script failed with exit code $?" >> /var/log/nomad-setup.log
+      # Setup logging
+      - echo "Starting Nomad client setup" > /var/log/nomad-setup.log
+      
+      # Create directories
+      - mkdir -p /opt/nomad/data /etc/nomad.d /var/log
+      
+      # Download and install Nomad
+      - echo "Downloading Nomad ${var.nomad_version}..." | tee -a /var/log/nomad-setup.log
+      - wget -q https://releases.hashicorp.com/nomad/${var.nomad_version}/nomad_${var.nomad_version}_linux_amd64.zip -O /tmp/nomad.zip
+      - unzip -o /tmp/nomad.zip -d /usr/local/bin
+      - chmod +x /usr/local/bin/nomad
+      - rm /tmp/nomad.zip
+      
+      # Create Nomad user
+      - echo "Creating nomad user..." | tee -a /var/log/nomad-setup.log
+      - id -u nomad &>/dev/null || useradd --system --home /etc/nomad.d --shell /bin/false nomad
+      - touch /var/log/nomad.log
+      - chown -R nomad:nomad /opt/nomad /etc/nomad.d /var/log/nomad.log
+      
+      # Configure Docker
+      - echo "Configuring Docker..." | tee -a /var/log/nomad-setup.log
+      - systemctl enable docker
+      - systemctl start docker
+      - usermod -aG docker azureuser
+      
+      # Setup Docker config.json with ACR credentials
+      - echo "Creating Docker config.json with ACR credentials..." | tee -a /var/log/nomad-setup.log
+      - mkdir -p /etc/docker
+      - ENCODED_AUTH=$(echo -n "${var.acr_admin_username}:${var.acr_admin_password}" | base64 -w0)
+      - sed "s/CREDENTIALS_PLACEHOLDER/$ENCODED_AUTH/g" /etc/docker/config.json.template > /etc/docker/config.json
+      - chmod 600 /etc/docker/config.json
+      - systemctl restart docker
+      
+      # Test ACR authentication
+      - echo "Testing ACR authentication..." | tee -a /var/log/nomad-setup.log
+      - docker pull ${var.acr_login_server}/hello-world:latest || echo "Failed to pull test image, but continuing" | tee -a /var/log/nomad-setup.log
+      
+      # Start Nomad client
+      - echo "Enabling and starting Nomad client..." | tee -a /var/log/nomad-setup.log
+      - systemctl daemon-reload
+      - systemctl enable nomad-client
+      - systemctl start nomad-client
+      
+      # Check Nomad status
+      - echo "Checking Nomad client status..." | tee -a /var/log/nomad-setup.log
+      - sleep 5
+      - systemctl status nomad-client | tee -a /var/log/nomad-setup.log || echo "Nomad client service status check failed, but continuing" | tee -a /var/log/nomad-setup.log
+      - echo "Nomad client setup completed!" | tee -a /var/log/nomad-setup.log
   EOF
   )
 }

@@ -61,12 +61,9 @@ job "server-info-web" {
       }
 
       env {
-        # Static environment variables
         APP_ENV = "nomad"
         HOSTNAME = "${attr.unique.hostname}"
         NODE_IP = "${attr.unique.network.ip-address}"
-        
-        # You can also reference Nomad variables
         NOMAD_ALLOC_ID = "${NOMAD_ALLOC_ID}"
         NOMAD_JOB_NAME = "${NOMAD_JOB_NAME}"
         NOMAD_TASK_NAME = "${NOMAD_TASK_NAME}"
@@ -76,6 +73,7 @@ job "server-info-web" {
         # Dynamische Image-Auswahl: lokal oder aus ACR
         image = "${var.ACR_NAME != "" ? "${var.ACR_NAME}.azurecr.io/" : ""}${var.IMAGE_NAME}:${var.IMAGE_VERSION}"
         ports = ["http"]
+        # Die ACR-Authentifizierung erfolgt auf Client-Ebene
       }
     }
   }

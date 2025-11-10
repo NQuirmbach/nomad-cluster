@@ -212,14 +212,14 @@ nomad agent -config=/etc/nomad.d -validate
 
 ### ACR-Authentifizierung
 
-#### Methode 1: Admin-Credentials (empfohlen für Demo/Dev)
+#### Methode 1: Admin-Credentials mit Client-Konfiguration (empfohlen für Demo/Dev)
 
 1. Konfiguration:
    - Die ACR ist mit aktivierten Admin-Credentials konfiguriert
-   - Die Credentials werden automatisch beim Hochfahren der Clients verwendet
-   - Die Clients führen `docker login` mit den Admin-Credentials aus
+   - Die Credentials werden in der Nomad-Client-Konfiguration hinterlegt
+   - Die Authentifizierung erfolgt automatisch auf Client-Ebene
 
-2. Terraform-Konfiguration:
+2. Terraform-Konfiguration für ACR:
    ```hcl
    resource "azurerm_container_registry" "acr" {
      name                = replace("${var.prefix}acr", "-", "")
@@ -231,7 +231,33 @@ nomad agent -config=/etc/nomad.d -validate
    }
    ```
 
-3. Nomad-Job-Konfiguration:
+3. Nomad-Client-Konfiguration:
+   ```hcl
+   # Docker-Plugin-Konfiguration in client.hcl
+   plugin "docker" {
+     config {
+       # ... andere Optionen ...
+       
+       # ACR-Authentifizierung auf Client-Ebene
+       auth {
+         config = "/etc/docker/config.json"
+       }
+     }
+   }
+   ```
+
+4. Docker-Konfigurationsdatei (`/etc/docker/config.json`):
+   ```json
+   {
+     "auths": {
+       "acr-name.azurecr.io": {
+         "auth": "BASE64_ENCODED_USERNAME_PASSWORD"
+       }
+     }
+   }
+   ```
+
+5. Nomad-Job-Konfiguration:
    - Verwende eine einfache Docker-Konfiguration ohne Auth-Block:
    ```hcl
    config {
@@ -240,7 +266,11 @@ nomad agent -config=/etc/nomad.d -validate
    }
    ```
 
-4. Fehlersuche:
+6. Fehlersuche:
+   - Überprüfe die Docker-Konfigurationsdatei:
+   ```bash
+   cat /etc/docker/config.json
+   ```
    - Überprüfe, ob Docker erfolgreich eingeloggt ist:
    ```bash
    docker info | grep -A 5 "Registry"
@@ -290,8 +320,28 @@ nomad agent -config=/etc/nomad.d -validate
    - Falsche Server-Adressen in der Client-Konfiguration
    - Firewall blockiert die Verbindung
    - Fehlerhafte Nomad-Konfiguration
+   - Cloud-Init-Script wurde nicht korrekt ausgeführt
+   - Nomad-Service wurde nicht aktiviert oder gestartet
 
-3. Netzwerkverbindung prüfen:
+3. Überprüfe, ob Nomad installiert ist:
+   ```bash
+   # Prüfe, ob die Nomad-Binärdatei existiert
+   ls -la /usr/local/bin/nomad
+   
+   # Prüfe die Nomad-Version
+   nomad version
+   ```
+
+4. Überprüfe die Cloud-Init-Logs:
+   ```bash
+   # Prüfe die Cloud-Init-Logs nach Nomad-bezogenen Einträgen
+   sudo journalctl -u cloud-init | grep -i nomad
+   
+   # Prüfe das Setup-Log, falls vorhanden
+   sudo cat /var/log/nomad-setup.log
+   ```
+
+5. Netzwerkverbindung prüfen:
    ```bash
    # Prüfe, ob die Clients die Server erreichen können
    nc -zv <server-ip> 4647
@@ -303,8 +353,11 @@ nomad agent -config=/etc/nomad.d -validate
    route -n
    ```
 
-4. Nomad-Client-Konfiguration prüfen:
+6. Nomad-Client-Konfiguration prüfen:
    ```bash
+   # Prüfe, ob die Client-Konfiguration existiert
+   ls -la /etc/nomad.d/
+   
    # Prüfe die Client-Konfiguration
    cat /etc/nomad.d/client.hcl
    
@@ -312,31 +365,26 @@ nomad agent -config=/etc/nomad.d -validate
    grep servers /etc/nomad.d/client.hcl
    ```
 
-5. Nomad-Client-Dienst prüfen:
+7. Nomad-Client-Dienst prüfen:
    ```bash
+   # Prüfe, ob der Dienst existiert
+   systemctl list-unit-files | grep nomad
+   
    # Prüfe den Status des Nomad-Client-Dienstes
    systemctl status nomad-client
+   
+   # Aktiviere und starte den Dienst, falls nötig
+   sudo systemctl enable nomad-client
+   sudo systemctl start nomad-client
    
    # Prüfe die Logs
    journalctl -u nomad-client -n 100
    ```
 
-6. Firewall-Regeln prüfen:
-   ```bash
-   # Prüfe die Firewall-Regeln
-   sudo iptables -L
-   
-   # Prüfe die Sicherheitsgruppen in Azure
-   ```
-
-7. Debug-Skript ausführen:
-   ```bash
-   # Führe das Debug-Skript aus
-   /opt/scripts/debug-nomad.sh > /tmp/nomad-debug.log
-   
-   # Analysiere die Ausgabe
-   cat /tmp/nomad-debug.log
-   ```
+8. Häufige Fehler im Cloud-Init-Script:
+   - Falscher Benutzername: Wenn das Script versucht, den Benutzer `ubuntu` zur Docker-Gruppe hinzuzufügen, aber der Azure VM-Benutzer ist `azureuser`
+   - Fehlende Berechtigungen: Stellen Sie sicher, dass die Verzeichnisse und Dateien die richtigen Berechtigungen haben
+   - Fehlgeschlagene Downloads: Überprüfen Sie die Internetverbindung und die URL für den Nomad-Download
 
 ## Nützliche Ressourcen
 

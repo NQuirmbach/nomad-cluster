@@ -48,7 +48,7 @@ tasks:
     vars:
       INSTANCE: "{{.INSTANCE | default 0}}"
     cmds:
-      - ./scripts/ssh-to-nomad-client.sh -i {{.INSTANCE}}
+      - ./scripts/ssh-to-nomad-client.sh --INSTANCE_ID {{.INSTANCE}}
 
   default:
     desc: List all available tasks
