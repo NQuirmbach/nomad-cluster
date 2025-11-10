@@ -16,14 +16,8 @@ variable "IMAGE_NAME" {
   description = "Name des Docker Images"
 }
 
-variable "DATACENTER" {
-  type = string
-  default = "dc1"
-  description = "Nomad Datacenter für den Job"
-}
-
 job "server-info-web" {
-  datacenters = ["${var.DATACENTER}"]
+  datacenters = ["dc1"]
   type = "service"
 
   ui {

@@ -19,7 +19,7 @@ allowed_ssh_ips = ["123.123.123.123/32"]  # Deine IP-Adresse
 enable_github_actions_rbac = true  # Aktiviert RBAC für GitHub Actions Managed Identity
 
 # Software Versionen
-nomad_version  = "1.6.0"
+nomad_version  = "1.7.5"
 consul_version = "1.16.0"
 
 # Tags
