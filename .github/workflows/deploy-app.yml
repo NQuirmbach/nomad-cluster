@@ -17,7 +17,7 @@ on:
 
   push:
     branches: [main]
-    paths: ["jobs/**", "app/**"]
+    paths: ["jobs/**", "app/**", ".github/workflows/deploy-app.yml"]
 
 jobs:
   build:
@@ -124,11 +124,10 @@ jobs:
       - name: Set Environment Variables
         id: env_vars
         run: |
-          # Dynamisch Resource Group und ACR Namen berechnen
           ENV="${{ github.event.inputs.environment || 'dev' }}"
           PREFIX="nomad-cluster"
           RESOURCE_GROUP="rg-${PREFIX}-${ENV}"
-          ACR_NAME="acr${PREFIX//-/}${ENV}"
+          ACR_NAME="nmdclstr${ENV}acr"
 
           echo "RESOURCE_GROUP=$RESOURCE_GROUP" >> $GITHUB_ENV
           echo "ACR_NAME=$ACR_NAME" >> $GITHUB_ENV
