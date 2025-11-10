@@ -311,54 +311,133 @@ resource "azurerm_linux_virtual_machine_scale_set" "nomad_client" {
           }
 
     runcmd:
-      # Setup logging
-      - echo "Starting Nomad client setup" > /var/log/nomad-setup.log
+      # Debugging: Markiere den Beginn des Cloud-Init-Scripts
+      - echo "===== STARTING NOMAD CLIENT SETUP =====" > /var/log/nomad-setup.log
+      - date >> /var/log/nomad-setup.log
+      
+      # Debugging: Umgebungsvariablen anzeigen
+      - echo "Environment variables:" >> /var/log/nomad-setup.log
+      - env | sort >> /var/log/nomad-setup.log
+      
+      # Debugging: Verzeichnisstruktur anzeigen
+      - echo "Directory structure:" >> /var/log/nomad-setup.log
+      - ls -la / >> /var/log/nomad-setup.log
+      - ls -la /etc >> /var/log/nomad-setup.log
       
       # Create directories
+      - echo "Creating directories..." | tee -a /var/log/nomad-setup.log
       - mkdir -p /opt/nomad/data /etc/nomad.d /var/log
+      - ls -la /opt/nomad /etc/nomad.d >> /var/log/nomad-setup.log
       
       # Download and install Nomad
       - echo "Downloading Nomad ${var.nomad_version}..." | tee -a /var/log/nomad-setup.log
       - wget -q https://releases.hashicorp.com/nomad/${var.nomad_version}/nomad_${var.nomad_version}_linux_amd64.zip -O /tmp/nomad.zip
+      - echo "Download complete, installing..." | tee -a /var/log/nomad-setup.log
       - unzip -o /tmp/nomad.zip -d /usr/local/bin
       - chmod +x /usr/local/bin/nomad
       - rm /tmp/nomad.zip
+      - ls -la /usr/local/bin/nomad >> /var/log/nomad-setup.log
+      - /usr/local/bin/nomad version >> /var/log/nomad-setup.log 2>&1 || echo "Failed to get Nomad version" >> /var/log/nomad-setup.log
       
       # Create Nomad user
       - echo "Creating nomad user..." | tee -a /var/log/nomad-setup.log
-      - id -u nomad &>/dev/null || useradd --system --home /etc/nomad.d --shell /bin/false nomad
+      - useradd --system --home /etc/nomad.d --shell /bin/false nomad || echo "User nomad may already exist" | tee -a /var/log/nomad-setup.log
       - touch /var/log/nomad.log
-      - chown -R nomad:nomad /opt/nomad /etc/nomad.d /var/log/nomad.log
+      - mkdir -p /opt/nomad /etc/nomad.d
+      - chown -R nomad:nomad /opt/nomad /etc/nomad.d /var/log/nomad.log || echo "Chown failed, but continuing" | tee -a /var/log/nomad-setup.log
+      - ls -la /etc/nomad.d >> /var/log/nomad-setup.log
+      - id nomad >> /var/log/nomad-setup.log 2>&1 || echo "Failed to get nomad user info" | tee -a /var/log/nomad-setup.log
       
       # Configure Docker
       - echo "Configuring Docker..." | tee -a /var/log/nomad-setup.log
       - systemctl enable docker
       - systemctl start docker
+      - systemctl status docker >> /var/log/nomad-setup.log 2>&1
       - usermod -aG docker azureuser
+      - id azureuser >> /var/log/nomad-setup.log
       
       # Setup Docker config.json with ACR credentials
       - echo "Creating Docker config.json with ACR credentials..." | tee -a /var/log/nomad-setup.log
       - mkdir -p /etc/docker
+      - mkdir -p /root/.docker
+      - mkdir -p /home/azureuser/.docker
+      
+      # Direkte Erstellung der Docker-Konfigurationsdatei ohne Template
+      - echo "Creating Docker config directly..." | tee -a /var/log/nomad-setup.log
       - ENCODED_AUTH=$(echo -n "${var.acr_admin_username}:${var.acr_admin_password}" | base64 -w0)
-      - sed "s/CREDENTIALS_PLACEHOLDER/$ENCODED_AUTH/g" /etc/docker/config.json.template > /etc/docker/config.json
-      - chmod 600 /etc/docker/config.json
+      - echo "Encoded auth created" | tee -a /var/log/nomad-setup.log
+      
+      # Erstelle die Konfigurationsdateien an allen relevanten Orten
+      - echo '{"auths":{"'${var.acr_login_server}'":{"auth":"'"$ENCODED_AUTH"'"}}}' > /etc/docker/config.json
+      - echo '{"auths":{"'${var.acr_login_server}'":{"auth":"'"$ENCODED_AUTH"'"}}}' > /root/.docker/config.json
+      - echo '{"auths":{"'${var.acr_login_server}'":{"auth":"'"$ENCODED_AUTH"'"}}}' > /home/azureuser/.docker/config.json
+      
+      # Setze Berechtigungen
+      - chmod 600 /etc/docker/config.json /root/.docker/config.json
+      - chown azureuser:azureuser /home/azureuser/.docker/config.json
+      - chmod 600 /home/azureuser/.docker/config.json
+      
+      # Überprüfe die Konfigurationsdateien
+      - echo "Docker config files created:" | tee -a /var/log/nomad-setup.log
+      - ls -la /etc/docker/config.json >> /var/log/nomad-setup.log
+      - ls -la /root/.docker/config.json >> /var/log/nomad-setup.log
+      - ls -la /home/azureuser/.docker/config.json >> /var/log/nomad-setup.log
+      
+      # Neustart des Docker-Dienstes
       - systemctl restart docker
+      - echo "Docker restarted" | tee -a /var/log/nomad-setup.log
       
       # Test ACR authentication
       - echo "Testing ACR authentication..." | tee -a /var/log/nomad-setup.log
-      - docker pull ${var.acr_login_server}/hello-world:latest || echo "Failed to pull test image, but continuing" | tee -a /var/log/nomad-setup.log
+      - docker info >> /var/log/nomad-setup.log 2>&1
+      - docker pull ${var.acr_login_server}/hello-world:latest >> /var/log/nomad-setup.log 2>&1 || echo "Failed to pull test image, but continuing" | tee -a /var/log/nomad-setup.log
+      
+      # Verify Nomad client configuration
+      - echo "Verifying Nomad client configuration..." | tee -a /var/log/nomad-setup.log
+      - cat /etc/nomad.d/client.hcl >> /var/log/nomad-setup.log
+      - cat /etc/systemd/system/nomad-client.service >> /var/log/nomad-setup.log
+      
+      # Überprüfe die Nomad-Konfiguration vor dem Start
+      - echo "Validating Nomad configuration..." | tee -a /var/log/nomad-setup.log
+      - nomad validate /etc/nomad.d/client.hcl >> /var/log/nomad-setup.log 2>&1 || echo "Nomad configuration validation failed, but continuing" | tee -a /var/log/nomad-setup.log
+      
+      # Stelle sicher, dass die Verzeichnisse die richtigen Berechtigungen haben
+      - echo "Setting correct permissions..." | tee -a /var/log/nomad-setup.log
+      - mkdir -p /opt/nomad/data /etc/nomad.d
+      - chown -R nomad:nomad /opt/nomad /etc/nomad.d /var/log/nomad.log || echo "Chown failed, but continuing" | tee -a /var/log/nomad-setup.log
+      - chmod 755 /opt/nomad /etc/nomad.d
+      - chmod 644 /etc/nomad.d/client.hcl
+      - ls -la /opt/nomad /etc/nomad.d >> /var/log/nomad-setup.log
       
       # Start Nomad client
       - echo "Enabling and starting Nomad client..." | tee -a /var/log/nomad-setup.log
       - systemctl daemon-reload
       - systemctl enable nomad-client
-      - systemctl start nomad-client
+      - systemctl start nomad-client || echo "Failed to start Nomad client service, retrying..." | tee -a /var/log/nomad-setup.log
+      
+      # Wenn der erste Start fehlschlägt, versuche es erneut
+      - sleep 5
+      - systemctl status nomad-client >> /var/log/nomad-setup.log 2>&1 || systemctl restart nomad-client
       
       # Check Nomad status
       - echo "Checking Nomad client status..." | tee -a /var/log/nomad-setup.log
-      - sleep 5
-      - systemctl status nomad-client | tee -a /var/log/nomad-setup.log || echo "Nomad client service status check failed, but continuing" | tee -a /var/log/nomad-setup.log
-      - echo "Nomad client setup completed!" | tee -a /var/log/nomad-setup.log
+      - sleep 10
+      - systemctl status nomad-client >> /var/log/nomad-setup.log 2>&1 || echo "Nomad client service status check failed" | tee -a /var/log/nomad-setup.log
+      
+      # Ausführliche Diagnose
+      - echo "Collecting diagnostic information..." | tee -a /var/log/nomad-setup.log
+      - ps aux | grep nomad >> /var/log/nomad-setup.log
+      - netstat -tulpn | grep nomad >> /var/log/nomad-setup.log
+      - journalctl -u nomad-client -n 50 >> /var/log/nomad-setup.log 2>&1
+      - ls -la /usr/local/bin/nomad >> /var/log/nomad-setup.log
+      - nomad version >> /var/log/nomad-setup.log 2>&1 || echo "Failed to get Nomad version" | tee -a /var/log/nomad-setup.log
+      
+      # Manueller Start als Fallback
+      - echo "Attempting manual start if service failed..." | tee -a /var/log/nomad-setup.log
+      - systemctl status nomad-client >> /var/log/nomad-setup.log 2>&1 || nohup /usr/local/bin/nomad agent -config=/etc/nomad.d > /var/log/nomad-manual.log 2>&1 &
+      
+      - echo "===== NOMAD CLIENT SETUP COMPLETED =====" | tee -a /var/log/nomad-setup.log
+      - date >> /var/log/nomad-setup.log
   EOF
   )
 }

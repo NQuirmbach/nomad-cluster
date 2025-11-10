@@ -337,6 +337,9 @@ nomad agent -config=/etc/nomad.d -validate
    # Prüfe die Cloud-Init-Logs nach Nomad-bezogenen Einträgen
    sudo journalctl -u cloud-init | grep -i nomad
    
+   # Prüfe die Cloud-Init-Ausgabe
+   sudo cat /var/log/cloud-init-output.log
+   
    # Prüfe das Setup-Log, falls vorhanden
    sudo cat /var/log/nomad-setup.log
    ```
@@ -385,6 +388,97 @@ nomad agent -config=/etc/nomad.d -validate
    - Falscher Benutzername: Wenn das Script versucht, den Benutzer `ubuntu` zur Docker-Gruppe hinzuzufügen, aber der Azure VM-Benutzer ist `azureuser`
    - Fehlende Berechtigungen: Stellen Sie sicher, dass die Verzeichnisse und Dateien die richtigen Berechtigungen haben
    - Fehlgeschlagene Downloads: Überprüfen Sie die Internetverbindung und die URL für den Nomad-Download
+
+### Cloud-Init-Probleme bei der Nomad-Client-Installation
+
+1. Problem:
+   - Cloud-Init-Script wird nicht vollständig ausgeführt
+   - Nomad wird nicht installiert oder gestartet
+   - In den Cloud-Init-Logs fehlen Nomad-bezogene Einträge
+
+2. Diagnose:
+   ```bash
+   # Prüfe den Status von Cloud-Init
+   sudo cloud-init status
+   
+   # Prüfe die Cloud-Init-Logs
+   sudo cat /var/log/cloud-init.log
+   
+   # Prüfe die Cloud-Init-Ausgabe
+   sudo cat /var/log/cloud-init-output.log
+   ```
+
+3. Häufige Probleme und Lösungen:
+
+   a) **Nomad-Benutzer wird nicht erstellt**:
+   ```
+   id: 'nomad': no such user
+   chown: invalid user: 'nomad:nomad'
+   ```
+   
+   Lösung:
+   ```bash
+   # Benutzer manuell erstellen
+   sudo useradd --system --home /etc/nomad.d --shell /bin/false nomad
+   sudo mkdir -p /opt/nomad /etc/nomad.d
+   sudo touch /var/log/nomad.log
+   sudo chown -R nomad:nomad /opt/nomad /etc/nomad.d /var/log/nomad.log
+   ```
+
+   b) **Docker-Authentifizierung funktioniert nicht**:
+   ```
+   Login prior to pull:
+   Log in with your Docker ID or email address to push and pull images from Docker Hub.
+   ```
+   
+   Lösung:
+   ```bash
+   # Docker-Konfiguration manuell erstellen
+   sudo mkdir -p /etc/docker /root/.docker /home/azureuser/.docker
+   
+   # Ersetze ACR_LOGIN_SERVER, ACR_USERNAME und ACR_PASSWORD mit den tatsächlichen Werten
+   ENCODED_AUTH=$(echo -n "ACR_USERNAME:ACR_PASSWORD" | base64 -w0)
+   
+   # Erstelle die Konfigurationsdateien an allen relevanten Orten
+   echo '{"auths":{"ACR_LOGIN_SERVER":{"auth":"'"$ENCODED_AUTH"'"}}}' | sudo tee /etc/docker/config.json
+   echo '{"auths":{"ACR_LOGIN_SERVER":{"auth":"'"$ENCODED_AUTH"'"}}}' | sudo tee /root/.docker/config.json
+   echo '{"auths":{"ACR_LOGIN_SERVER":{"auth":"'"$ENCODED_AUTH"'"}}}' | sudo tee /home/azureuser/.docker/config.json
+   
+   # Setze Berechtigungen
+   sudo chmod 600 /etc/docker/config.json /root/.docker/config.json
+   sudo chown azureuser:azureuser /home/azureuser/.docker/config.json
+   sudo chmod 600 /home/azureuser/.docker/config.json
+   
+   # Neustart des Docker-Dienstes
+   sudo systemctl restart docker
+   ```
+
+   c) **Nomad-Client-Service startet nicht**:
+   
+   Lösung:
+   ```bash
+   # Überprüfe die Nomad-Konfiguration
+   sudo nomad validate /etc/nomad.d/client.hcl
+   
+   # Stelle sicher, dass die Verzeichnisse die richtigen Berechtigungen haben
+   sudo mkdir -p /opt/nomad/data /etc/nomad.d
+   sudo chown -R nomad:nomad /opt/nomad /etc/nomad.d /var/log/nomad.log
+   sudo chmod 755 /opt/nomad /etc/nomad.d
+   sudo chmod 644 /etc/nomad.d/client.hcl
+   
+   # Starte den Nomad-Client-Service neu
+   sudo systemctl daemon-reload
+   sudo systemctl restart nomad-client
+   
+   # Wenn der Service nicht startet, versuche einen manuellen Start
+   sudo nohup /usr/local/bin/nomad agent -config=/etc/nomad.d > /var/log/nomad-manual.log 2>&1 &
+   ```
+
+4. Präventive Maßnahmen:
+   - Füge ausführliche Logging in das Cloud-Init-Script ein
+   - Verwende Fehlerbehandlung für kritische Befehle
+   - Teste das Script in einer separaten VM, bevor es in der Produktion eingesetzt wird
+   - Verwende `set -e` in Shell-Skripten, um bei Fehlern abzubrechen
 
 ## Nützliche Ressourcen
 
