@@ -75,9 +75,15 @@ resource "azurerm_lb" "nomad" {
   }
 }
 
-# Backend Address Pool
+# Backend Address Pool für Server
 resource "azurerm_lb_backend_address_pool" "nomad_servers" {
-  name            = "${var.prefix}-backend-pool"
+  name            = "${var.prefix}-server-backend-pool"
+  loadbalancer_id = azurerm_lb.nomad.id
+}
+
+# Backend Address Pool für Clients
+resource "azurerm_lb_backend_address_pool" "nomad_clients" {
+  name            = "${var.prefix}-client-backend-pool"
   loadbalancer_id = azurerm_lb.nomad.id
 }
 
@@ -139,7 +145,7 @@ resource "azurerm_lb_rule" "traefik_http" {
   frontend_port                  = 80
   backend_port                   = 8080
   frontend_ip_configuration_name = "PublicIPAddress"
-  backend_address_pool_ids       = [azurerm_lb_backend_address_pool.nomad_servers.id]
+  backend_address_pool_ids       = [azurerm_lb_backend_address_pool.nomad_clients.id]
   probe_id                       = azurerm_lb_probe.traefik_http.id
 }
 
@@ -159,7 +165,7 @@ resource "azurerm_lb_rule" "traefik_dashboard" {
   frontend_port                  = 8081
   backend_port                   = 8081
   frontend_ip_configuration_name = "PublicIPAddress"
-  backend_address_pool_ids       = [azurerm_lb_backend_address_pool.nomad_servers.id]
+  backend_address_pool_ids       = [azurerm_lb_backend_address_pool.nomad_clients.id]
   probe_id                       = azurerm_lb_probe.traefik_dashboard.id
 }
 
@@ -198,11 +204,11 @@ resource "azurerm_network_interface_nat_rule_association" "ssh" {
   nat_rule_id           = azurerm_lb_nat_rule.ssh[count.index].id
 }
 
-# Nomad Client VMSS
+# VM Scale Set für Nomad Clients
 resource "azurerm_linux_virtual_machine_scale_set" "nomad_client" {
   name                = "${var.prefix}-client-vmss"
-  location            = var.location
   resource_group_name = var.resource_group_name
+  location            = var.location
   sku                 = var.client_vm_size
   instances           = var.client_count
   admin_username      = "azureuser"
@@ -231,9 +237,10 @@ resource "azurerm_linux_virtual_machine_scale_set" "nomad_client" {
     primary = true
 
     ip_configuration {
-      name      = "internal"
-      primary   = true
-      subnet_id = var.subnet_id
+      name                                   = "internal"
+      primary                                = true
+      subnet_id                              = var.subnet_id
+      load_balancer_backend_address_pool_ids = [azurerm_lb_backend_address_pool.nomad_clients.id]
     }
 
     network_security_group_id = var.client_nsg_id

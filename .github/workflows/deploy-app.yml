@@ -188,7 +188,8 @@ jobs:
 
       - name: Verify Deployment
         run: |
-          JOB_NAME=$(nomad job inspect -var="IMAGE_VERSION=${{ needs.build.outputs.image_tag }}" -var="ACR_NAME=${{ env.ACR_NAME }}" -var="IMAGE_NAME=server-info" ${{ env.JOB_FILE }} | jq -r '.ID')
+          # Get the job name from the job file (server-info-web is the job name in web.nomad)
+          JOB_NAME="server-info-web"
           nomad job status $JOB_NAME
 
           echo "## Application Deployed!" >> $GITHUB_STEP_SUMMARY
