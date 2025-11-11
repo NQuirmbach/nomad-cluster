@@ -128,7 +128,7 @@ resource "azurerm_lb_probe" "traefik_http" {
   name            = "traefik-http-probe"
   loadbalancer_id = azurerm_lb.nomad.id
   protocol        = "Http"
-  port            = 8080
+  port            = 9080
   request_path    = "/ping"
 }
 
@@ -138,7 +138,7 @@ resource "azurerm_lb_rule" "traefik_http" {
   loadbalancer_id                = azurerm_lb.nomad.id
   protocol                       = "Tcp"
   frontend_port                  = 80
-  backend_port                   = 8080
+  backend_port                   = 9080
   frontend_ip_configuration_name = "PublicIPAddress"
   backend_address_pool_ids       = [azurerm_lb_backend_address_pool.nomad_servers.id]
   probe_id                       = azurerm_lb_probe.traefik_http.id
@@ -149,7 +149,7 @@ resource "azurerm_lb_probe" "traefik_dashboard" {
   name            = "traefik-dashboard-probe"
   loadbalancer_id = azurerm_lb.nomad.id
   protocol        = "Http"
-  port            = 8081
+  port            = 9081
   request_path    = "/ping"
 }
 
@@ -159,7 +159,7 @@ resource "azurerm_lb_rule" "traefik_dashboard" {
   loadbalancer_id                = azurerm_lb.nomad.id
   protocol                       = "Tcp"
   frontend_port                  = 8081
-  backend_port                   = 8081
+  backend_port                   = 9081
   frontend_ip_configuration_name = "PublicIPAddress"
   backend_address_pool_ids       = [azurerm_lb_backend_address_pool.nomad_servers.id]
   probe_id                       = azurerm_lb_probe.traefik_dashboard.id

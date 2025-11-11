@@ -7,14 +7,14 @@ job "traefik" {
 
     network {
       port "http" {
-        static = 8080
+        static = 9080
       }
       port "admin" {
-        static = 8081
+        static = 9081
       }
       # Zusätzliche Ports für interne Kommunikation
       port "ping" {
-        static = 8082
+        static = 9082
       }
     }
 
@@ -56,36 +56,46 @@ job "traefik" {
 
         # Direkte Konfiguration über Kommandozeilenargumente statt Konfigurationsdateien
         args = [
-          "--entrypoints.web.address=:8080",
-          "--entrypoints.dashboard.address=:8081",
-          "--entrypoints.ping.address=:8082",
+          "--entrypoints.web.address=:9080",
+          "--entrypoints.dashboard.address=:9081",
+          "--entrypoints.ping.address=:9082",
           "--ping.entrypoint=ping",
           "--api.dashboard=true",
           "--api.insecure=true",
-          "--api.entrypoint=dashboard",
-          "--providers.consulcatalog=true",
-          "--providers.consulcatalog.prefix=traefik",
-          "--providers.consulcatalog.exposedByDefault=false",
-          "--providers.consulcatalog.endpoint.address=127.0.0.1:8500",
           "--providers.file.filename=/local/dynamic_conf.toml",
+          "--providers.file.watch=true",
           "--log.level=DEBUG"
         ]
       }
 
       # Kein leeres Template mehr notwendig
 
-      # Zusätzliche Konfiguration für Traefik (Middlewares)
+      # Zusätzliche Konfiguration für Traefik (Middlewares und Services)
       template {
         data = <<EOF
 # Dynamische Konfiguration für Traefik
+
+# Definiere den Server-Info Service
+[http.services]
+  [http.services.server-info-svc]
+    [http.services.server-info-svc.loadBalancer]
+      [[http.services.server-info-svc.loadBalancer.servers]]
+        url = "http://127.0.0.1:8080"
 
 # Middleware zum Entfernen des Pfad-Präfixes
 [http.middlewares]
   [http.middlewares.strip-server-info.stripPrefix]
     prefixes = ["/server-info"]
 
-# Catch-All Router für die Startseite
+# Router für die Server-Info App
 [http.routers]
+  [http.routers.server-info]
+    rule = "PathPrefix(`/server-info`)"
+    service = "server-info-svc"
+    entryPoints = ["web"]
+    middlewares = ["strip-server-info"]
+    
+  # Catch-All Router für die Startseite
   [http.routers.catchall]
     rule = "PathPrefix(`/`)"
     service = "server-info-svc"
