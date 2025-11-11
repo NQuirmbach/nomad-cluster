@@ -1,57 +1,57 @@
 # Nomad Cluster in Azure
 
-Dieses Projekt implementiert einen hochverfügbaren HashiCorp Nomad Cluster in Azure mittels Terraform und Ansible. Der Cluster wird über GitHub Actions automatisiert bereitgestellt und kann für die Orchestrierung verschiedener Workloads verwendet werden.
+This project implements a highly available HashiCorp Nomad cluster in Azure using Terraform and Ansible. The cluster is automatically provisioned through GitHub Actions and can be used for orchestrating various workloads.
 
-## Überblick
+## Overview
 
-### Was ist Nomad?
+### What is Nomad?
 
-[HashiCorp Nomad](https://www.nomadproject.io/) ist ein flexibler Workload-Orchestrator, der die Bereitstellung und Verwaltung von Containern und nicht-containerisierten Anwendungen vereinfacht. Im Vergleich zu Kubernetes bietet Nomad einen schlankeren Ansatz mit geringerer Komplexität.
+[HashiCorp Nomad](https://www.nomadproject.io/) is a flexible workload orchestrator that simplifies the deployment and management of containerized and non-containerized applications. Compared to Kubernetes, Nomad offers a leaner approach with reduced complexity.
 
-### Hauptfunktionen
+### Key Features
 
-- **Hochverfügbarer Cluster**: 3-Server-Setup für Consensus und Ausfallsicherheit
-- **Auto-Scaling**: Automatische Skalierung der Client-Nodes basierend auf Auslastung
-- **Infrastructure as Code**: Vollständig automatisierte Bereitstellung mit Terraform
-- **CI/CD-Integration**: GitHub Actions Workflows für Infrastruktur und Anwendungen
-- **Container Registry**: Azure Container Registry (ACR) Integration mit Managed Identity
-- **Secrets Management**: Azure Key Vault für sichere Speicherung von Secrets
+- **Highly Available Cluster**: 3-server setup for consensus and fault tolerance
+- **Auto-Scaling**: Automatic scaling of client nodes based on utilization
+- **Infrastructure as Code**: Fully automated provisioning with Terraform
+- **CI/CD Integration**: GitHub Actions workflows for infrastructure and applications
+- **Container Registry**: Azure Container Registry (ACR) integration with Managed Identity
+- **Secrets Management**: Azure Key Vault for secure storage of secrets
 
-### Technologie-Stack
+### Technology Stack
 
-- **Infrastruktur**: Azure (VMSS, Load Balancer, Key Vault, ACR)
-- **IaC**: Terraform für Azure-Ressourcen
-- **Konfiguration**: Ansible für Server, Cloud-Init für Clients
-- **CI/CD**: GitHub Actions mit OIDC-Authentifizierung
-- **Orchestrierung**: HashiCorp Nomad + Consul
+- **Infrastructure**: Azure (VMSS, Load Balancer, Key Vault, ACR)
+- **IaC**: Terraform for Azure resources
+- **Configuration**: Ansible for servers, Cloud-Init for clients
+- **CI/CD**: GitHub Actions with OIDC authentication
+- **Orchestration**: HashiCorp Nomad + Consul
 
-## Projektstruktur
+## Project Structure
 
 ```
 nomad-cluster/
 ├── .github/workflows/       # GitHub Actions Workflows
-├── ansible/                 # Ansible für Server-Konfiguration
-├── terraform/               # Terraform IaC für Azure
-├── jobs/                    # Nomad Job-Definitionen
-└── docs/                    # Detaillierte Dokumentation
+├── ansible/                 # Ansible for server configuration
+├── terraform/               # Terraform IaC for Azure
+├── jobs/                    # Nomad job definitions
+└── docs/                    # Detailed documentation
 ```
 
-## Erste Schritte
+## Getting Started
 
-Für eine detaillierte Anleitung zur Einrichtung und Verwendung des Clusters, siehe die [Setup-Dokumentation](docs/setup.md).
+For detailed instructions on setting up and using the cluster, see the [Setup Documentation](docs/setup.md).
 
-## Dokumentation
+## Documentation
 
-Dieses Projekt enthält umfangreiche Dokumentation im `docs/`-Verzeichnis:
+This project contains extensive documentation in the `docs/` directory:
 
-- [**Architektur**](docs/architecture.md): Vollständige Cluster-Architektur
-- [**Vereinfachte Architektur**](docs/architecture-simple.md): Vereinfachte Version für schnelles Deployment
-- [**Setup-Anleitung**](docs/setup.md): Detaillierte Einrichtungsanleitung
-- [**Sicherheit**](docs/security.md): Sicherheitshinweise und Best Practices
-- [**ACR-Integration**](docs/acr-integration.md): Azure Container Registry Integration
-- [**Nomad vs. Kubernetes**](docs/nomad-vs-kubernetes-praesentation.md): Vergleich der Orchestrierungsplattformen
+- [**Architecture**](docs/architecture.md): Complete cluster architecture
+- [**Simplified Architecture**](docs/architecture-simple.md): Simplified version for quick deployment
+- [**Setup Guide**](docs/setup.md): Detailed setup instructions
+- [**Security**](docs/security.md): Security notes and best practices
+- [**ACR Integration**](docs/acr-integration.md): Azure Container Registry integration
+- [**Nomad vs. Kubernetes**](docs/nomad-vs-kubernetes-praesentation.md): Comparison of orchestration platforms
 
-## Verwendete Technologien
+## Technologies Used
 
 - [HashiCorp Nomad](https://www.nomadproject.io/)
 - [HashiCorp Consul](https://www.consul.io/)
@@ -60,6 +60,6 @@ Dieses Projekt enthält umfangreiche Dokumentation im `docs/`-Verzeichnis:
 - [Azure Cloud](https://azure.microsoft.com/)
 - [GitHub Actions](https://github.com/features/actions)
 
-## Lizenz
+## License
 
-Dieses Projekt steht unter der MIT-Lizenz.
+This project is licensed under the MIT License.

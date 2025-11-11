@@ -51,7 +51,7 @@ job "dotnet-crud-api" {
         path     = "/health"
         interval = "10s"
         timeout  = "2s"
-        address_mode = "alloc"
+        address_mode = "host"
       }
     }
 
@@ -79,6 +79,16 @@ job "dotnet-crud-api" {
       
       config {
         command = "dotnet-api"
+      }
+
+      template {
+        data = <<EOH
+#!/bin/bash
+export ASPNETCORE_URLS="http://0.0.0.0:${NOMAD_PORT_http}"
+export ASPNETCORE_ENVIRONMENT="Production"
+EOH
+        destination = "local/env.sh"
+        env = true
       }
     }
   }
