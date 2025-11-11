@@ -1,6 +1,6 @@
-name: Build and Deploy to Nomad
+name: Build and Deploy Server Info app to Nomad
 
-run-name: Deploy to ${{ github.event.inputs.environment || 'dev' }} | ${{ github.event.head_commit.message || github.event.commits[0].message || 'Manual deployment' }}
+run-name: Deploy Server Info app to ${{ github.event.inputs.environment || 'dev' }} | ${{ github.event.head_commit.message || github.event.commits[0].message || 'Manual deployment' }}
 
 on:
   workflow_dispatch:

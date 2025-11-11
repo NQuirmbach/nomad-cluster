@@ -76,6 +76,18 @@ Diese vereinfachte Architektur fokussiert sich auf schnelles Setup via GitHub Ac
   - Managed Identity für ACR Pull-Zugriff
   - Docker-Treiber mit ACR-Authentifizierung
 
+#### Storage Account für Artifacts
+
+- **Type**: Azure Storage Account (Standard LRS)
+- **Container**: `artifacts` (private)
+- **Verwendung**:
+  - Speicherung von Deployment-Artifacts (z.B. .NET Executables)
+  - Zugriff über SAS-Tokens in Deployment-Pipelines
+  - RBAC-Integration mit GitHub Actions
+- **Sicherheit**:
+  - Private Access (kein öffentlicher Zugriff)
+  - Verschlüsselung im Ruhezustand (Azure Storage Encryption)
+
 #### Consul (Optional, aber empfohlen)
 
 - **Co-located**: Auf Nomad Server Nodes installiert
@@ -103,6 +115,7 @@ Diese vereinfachte Architektur fokussiert sich auf schnelles Setup via GitHub Ac
 - ✅ VMSS Auto-Scaling für Client Nodes
 - ✅ Log Analytics Workspace (für zentrales Logging)
 - ✅ Azure Bastion Service (für sicheren SSH-Zugriff)
+- ✅ Storage Account für Artifacts (für Executable Deployments)
 
 ## Konfigurationsmethodik
 
@@ -190,6 +203,12 @@ Die Cluster-Komponenten werden über verschiedene Methoden konfiguriert:
 │  │ Account      │  │  (Terraform    │  │         │  │
 │  │ (TF State)   │  │   State)       │  │         │  │
 │  └──────────────┘  └────────────────┘  └─────────┘  │
+│                                                       │
+│  ┌──────────────┐                                  │
+│  │ Storage      │                                  │
+│  │ Account      │                                  │
+│  │ (Artifacts)  │                                  │
+│  └──────────────┘                                  │
 │                                                       │
 │  ┌────────────────┐                                 │
 │  │ Log Analytics  │                                 │

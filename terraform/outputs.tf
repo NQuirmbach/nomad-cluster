@@ -123,3 +123,19 @@ output "consul_encrypt" {
   value       = module.services.consul_encrypt
   sensitive   = true
 }
+
+# Storage Account Outputs
+output "storage_account_name" {
+  description = "Name of the Storage Account"
+  value       = module.services.storage_account_name
+}
+
+output "storage_account_primary_blob_endpoint" {
+  description = "Primary blob endpoint of the Storage Account"
+  value       = module.services.storage_account_primary_blob_endpoint
+}
+
+output "artifacts_container_name" {
+  description = "Name of the artifacts container"
+  value       = module.services.artifacts_container_name
+}

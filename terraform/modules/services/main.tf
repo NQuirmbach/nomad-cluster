@@ -77,3 +77,29 @@ resource "azurerm_key_vault_secret" "consul_encrypt" {
   value        = random_id.consul_encrypt.b64_std
   key_vault_id = azurerm_key_vault.nomad.id
 }
+
+# Azure Storage Account for artifacts
+resource "azurerm_storage_account" "artifacts" {
+  name                     = replace("${var.prefix}storage", "-", "")
+  resource_group_name      = var.resource_group_name
+  location                 = var.location
+  account_tier             = "Standard"
+  account_replication_type = "LRS"
+  allow_nested_items_to_be_public = false
+  tags                     = var.tags
+}
+
+# Create artifacts container
+resource "azurerm_storage_container" "artifacts" {
+  name                  = "artifacts"
+  storage_account_id    = azurerm_storage_account.artifacts.id
+  container_access_type = "private"
+}
+
+# RBAC for GitHub Actions Managed Identity on Storage Account
+resource "azurerm_role_assignment" "github_actions_storage_contributor" {
+  count                = var.enable_github_actions_rbac ? 1 : 0
+  scope                = azurerm_storage_account.artifacts.id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = data.azurerm_user_assigned_identity.github_actions[0].principal_id
+}
