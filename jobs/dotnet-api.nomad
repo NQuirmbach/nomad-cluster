@@ -34,7 +34,7 @@ job "dotnet-crud-api" {
     }
 
     service {
-      name     = "dotnet-api-svc"
+      name     = "dotnet-api"
       port     = "http"
       provider = "consul"
       
@@ -51,6 +51,7 @@ job "dotnet-crud-api" {
         path     = "/health"
         interval = "10s"
         timeout  = "2s"
+        address_mode = "alloc"
       }
     }
 
