@@ -213,7 +213,6 @@ resource "azurerm_linux_virtual_machine_scale_set" "nomad_client" {
   instances           = var.client_count
   admin_username      = "azureuser"
   tags                = var.tags
-  upgrade_mode        = "Automatic"
 
   admin_ssh_key {
     username   = "azureuser"
@@ -268,19 +267,6 @@ resource "azurerm_linux_virtual_machine_scale_set" "nomad_client" {
     acr_admin_username = var.acr_admin_username,
     acr_admin_password = var.acr_admin_password
   }))
-
-  # Automatic rolling upgrade settings
-  automatic_os_upgrade_policy {
-    disable_automatic_rollback  = false
-    enable_automatic_os_upgrade = true
-  }
-
-  rolling_upgrade_policy {
-    max_batch_instance_percent              = 20
-    max_unhealthy_instance_percent          = 20
-    max_unhealthy_upgraded_instance_percent = 20
-    pause_time_between_batches              = "PT0S"
-  }
 }
 
 # RBAC-Rolle für ACR Pull (Managed Identity)
@@ -349,21 +335,6 @@ resource "azurerm_monitor_autoscale_setting" "nomad_client" {
   }
 }
 
-# Force VM Scale Set instance upgrade when backend pool association changes
-resource "null_resource" "force_vmss_upgrade" {
-  triggers = {
-    vmss_id = azurerm_linux_virtual_machine_scale_set.nomad_client.id
-    lb_backend_pool_id = azurerm_lb_backend_address_pool.nomad_clients.id
-  }
-
-  provisioner "local-exec" {
-    command = "az vmss update-instances --resource-group ${var.resource_group_name} --name ${azurerm_linux_virtual_machine_scale_set.nomad_client.name} --instance-ids '*'"
-  }
-
-  depends_on = [
-    azurerm_linux_virtual_machine_scale_set.nomad_client
-  ]
-}
 
 # VM Insights für Monitoring
 resource "azurerm_virtual_machine_scale_set_extension" "client_monitoring" {
@@ -384,5 +355,3 @@ resource "azurerm_virtual_machine_extension" "server_monitoring" {
   type_handler_version       = "1.0"
   auto_upgrade_minor_version = true
 }
-
-# Bastion Host wurde durch Azure Bastion Service ersetzt
