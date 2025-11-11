@@ -127,9 +127,8 @@ resource "azurerm_lb_rule" "consul_ui" {
 resource "azurerm_lb_probe" "traefik_http" {
   name            = "traefik-http-probe"
   loadbalancer_id = azurerm_lb.nomad.id
-  protocol        = "Http"
+  protocol        = "Tcp"
   port            = 9080
-  request_path    = "/ping"
 }
 
 # Load Balancer Rule für Traefik HTTP
@@ -148,9 +147,8 @@ resource "azurerm_lb_rule" "traefik_http" {
 resource "azurerm_lb_probe" "traefik_dashboard" {
   name            = "traefik-dashboard-probe"
   loadbalancer_id = azurerm_lb.nomad.id
-  protocol        = "Http"
+  protocol        = "Tcp"
   port            = 9081
-  request_path    = "/ping"
 }
 
 # Load Balancer Rule für Traefik Dashboard

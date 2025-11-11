@@ -12,10 +12,6 @@ job "traefik" {
       port "admin" {
         static = 9081
       }
-      # Zusätzliche Ports für interne Kommunikation
-      port "ping" {
-        static = 9082
-      }
     }
 
     service {
@@ -52,19 +48,16 @@ job "traefik" {
 
       config {
         image = "traefik:v2.10"
-        ports = ["http", "admin", "ping"]
+        ports = ["http", "admin"]
 
         # Direkte Konfiguration über Kommandozeilenargumente statt Konfigurationsdateien
         args = [
           "--entrypoints.web.address=:9080",
           "--entrypoints.dashboard.address=:9081",
-          "--entrypoints.ping.address=:9082",
-          "--ping.entrypoint=ping",
           "--api.dashboard=true",
           "--api.insecure=true",
           "--providers.file.filename=/local/dynamic_conf.toml",
-          "--providers.file.watch=true",
-          "--log.level=DEBUG"
+          "--log.level=INFO"
         ]
       }
 
