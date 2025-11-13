@@ -17,7 +17,8 @@ tasks:
       - |
         nomad agent -dev \
           -bind 0.0.0.0 \
-          -network-interface='{{.DEFAULT_INTERFACE}}'
+          -network-interface='{{.DEFAULT_INTERFACE}}' \
+          -config=nomad-dev.hcl
 
   status:
     desc: Show nomad node status
@@ -40,7 +41,7 @@ tasks:
         sh: date +%Y%m%d%H%M%S
     cmds:
       - cd apps/dotnet-api && task build IMAGE_VERSION={{.TIMESTAMP}}
-      - nomad job run -var IMAGE_VERSION={{.TIMESTAMP}} jobs/dotnet-api.nomad
+      - nomad job run -var API_VERSION={{.TIMESTAMP}} jobs/dotnet-api.nomad
 
   ssh-server:
     desc: Connect to a Nomad server via SSH

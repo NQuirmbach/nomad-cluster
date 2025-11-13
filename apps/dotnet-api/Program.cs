@@ -7,18 +7,17 @@ using Microsoft.OpenApi.Models;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.AspNetCore.Mvc;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container
 builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddHealthChecks();
+
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "Nomad .NET CRUD API", Version = "v1" });
 });
-builder.Services.AddHealthChecks();
 
 // Add in-memory data store as a singleton
 builder.Services.AddSingleton<ItemRepository>();
