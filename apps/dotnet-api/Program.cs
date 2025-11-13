@@ -20,11 +20,6 @@ builder.Services.AddSwaggerGen(c =>
 });
 builder.Services.AddHealthChecks();
 
-// Configure JSON serialization
-builder.Services.ConfigureHttpJsonOptions(options => {
-    options.SerializerOptions.TypeInfoResolverChain.Insert(0, AppJsonSerializerContext.Default);
-});
-
 // Add in-memory data store as a singleton
 builder.Services.AddSingleton<ItemRepository>();
 
@@ -99,14 +94,6 @@ public class Item
     public string Name { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public bool IsComplete { get; set; }
-}
-
-// JSON serialization context
-[JsonSerializable(typeof(Item))]
-[JsonSerializable(typeof(IEnumerable<Item>))]
-[JsonSerializable(typeof(object))]
-public partial class AppJsonSerializerContext : JsonSerializerContext
-{   
 }
 
 // In-memory repository
