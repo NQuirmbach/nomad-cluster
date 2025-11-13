@@ -1,12 +1,4 @@
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Diagnostics.HealthChecks;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.OpenApi.Models;
-using System.Collections.Generic;
-using System.Linq;
-using Microsoft.AspNetCore.Mvc;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -31,59 +23,102 @@ app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "Nomad .NET 
 // Define API endpoints
 app.MapGet("/", () => "Nomad .NET CRUD API is running!");
 
-app.MapGet("/api/items", (ItemRepository repo) => 
-    Results.Ok(repo.GetAll()));
+app.MapGet("/api/items", (ItemRepository repo) => Results.Ok(repo.GetAll()))
+    .WithName("GetAllItems")
+    .WithSummary("Get all items")
+    .WithDescription("Retrieves a list of all items in the repository")
+    .Produces<IEnumerable<Item>>();
 
-app.MapGet("/api/items/{id}", (int id, ItemRepository repo) =>
-{
-    var item = repo.GetById(id);
-    return item is null ? Results.NotFound() : Results.Ok(item);
-});
+app.MapGet(
+        "/api/items/{id}",
+        (int id, ItemRepository repo) =>
+        {
+            var item = repo.GetById(id);
+            return item is null ? Results.NotFound() : Results.Ok(item);
+        }
+    )
+    .WithName("GetItemById")
+    .WithSummary("Get item by ID")
+    .WithDescription("Retrieves a specific item by its unique identifier")
+    .Produces<Item>()
+    .Produces(StatusCodes.Status404NotFound);
 
-app.MapPost("/api/items", (Item item, ItemRepository repo) =>
-{
-    repo.Add(item);
-    return Results.Created($"/api/items/{item.Id}", item);
-});
+app.MapPost(
+        "/api/items",
+        (Item item, ItemRepository repo) =>
+        {
+            repo.Add(item);
+            return Results.Created($"/api/items/{item.Id}", item);
+        }
+    )
+    .WithName("CreateItem")
+    .WithSummary("Create a new item")
+    .WithDescription("Creates a new item and adds it to the repository")
+    .Accepts<Item>("application/json")
+    .Produces<Item>(StatusCodes.Status201Created);
 
-app.MapPut("/api/items/{id}", (int id, Item item, ItemRepository repo) =>
-{
-    if (id != item.Id)
-        return Results.BadRequest();
-        
-    var existingItem = repo.GetById(id);
-    if (existingItem is null)
-        return Results.NotFound();
-        
-    repo.Update(item);
-    return Results.NoContent();
-});
+app.MapPut(
+        "/api/items/{id}",
+        (int id, Item item, ItemRepository repo) =>
+        {
+            if (id != item.Id)
+                return Results.BadRequest();
 
-app.MapDelete("/api/items/{id}", (int id, ItemRepository repo) =>
-{
-    var existingItem = repo.GetById(id);
-    if (existingItem is null)
-        return Results.NotFound();
-        
-    repo.Delete(id);
-    return Results.NoContent();
-});
+            var existingItem = repo.GetById(id);
+            if (existingItem is null)
+                return Results.NotFound();
+
+            repo.Update(item);
+            return Results.NoContent();
+        }
+    )
+    .WithName("UpdateItem")
+    .WithSummary("Update an existing item")
+    .WithDescription("Updates an existing item with new values")
+    .Accepts<Item>("application/json")
+    .Produces(StatusCodes.Status204NoContent)
+    .Produces(StatusCodes.Status400BadRequest)
+    .Produces(StatusCodes.Status404NotFound);
+
+app.MapDelete(
+        "/api/items/{id}",
+        (int id, ItemRepository repo) =>
+        {
+            var existingItem = repo.GetById(id);
+            if (existingItem is null)
+                return Results.NotFound();
+
+            repo.Delete(id);
+            return Results.NoContent();
+        }
+    )
+    .WithName("DeleteItem")
+    .WithSummary("Delete an item")
+    .WithDescription("Deletes an item from the repository by its ID")
+    .Produces(StatusCodes.Status204NoContent)
+    .Produces(StatusCodes.Status404NotFound);
 
 // Add a health check endpoint
 app.MapHealthChecks("/health");
 
 // Add system info endpoint
-app.MapGet("/info", () => Results.Ok(new
-{
-    hostname = System.Environment.MachineName,
-    os = System.Runtime.InteropServices.RuntimeInformation.OSDescription,
-    framework = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
-    environment = app.Environment.EnvironmentName,
-    processId = System.Diagnostics.Process.GetCurrentProcess().Id
-}));
+app.MapGet(
+    "/info",
+    () =>
+        Results.Ok(
+            new
+            {
+                hostname = Environment.MachineName,
+                os = System.Runtime.InteropServices.RuntimeInformation.OSDescription,
+                framework = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
+                environment = app.Environment.EnvironmentName,
+                processId = System.Diagnostics.Process.GetCurrentProcess().Id,
+            }
+        )
+);
 
 // Run the app
-var port = int.Parse(System.Environment.GetEnvironmentVariable("PORT") ?? "8080");
+var port = int.Parse(Environment.GetEnvironmentVariable("PORT") ?? "8080");
 app.Run($"http://0.0.0.0:{port}");
 
 // Data model
