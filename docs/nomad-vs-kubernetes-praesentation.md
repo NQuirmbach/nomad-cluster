@@ -895,6 +895,160 @@ GESAMT AKS:                            ~€1.680/Monat
 | **Enterprise (>100 Devs)**   | ⭐⭐       | ⭐⭐⭐⭐⭐ | **Kubernetes** |
 | **Highly Regulated**         | ⭐⭐       | ⭐⭐⭐⭐⭐ | **Kubernetes** |
 
+### Detaillierte Begründungen
+
+#### 🎯 Legacy Migration (⭐⭐⭐⭐ Nomad)
+
+**Warum Nomad?**
+
+- **Native Exec-Driver**: Bestehende Binaries/Scripts ohne Containerisierung deployen
+- **Schrittweise Migration**: VMs, Container und Binaries parallel betreiben
+- **Geringere Einstiegshürde**: Kein Zwang zur Container-First-Architektur
+- **Weniger Refactoring**: Bestehende Deployment-Prozesse leichter übertragbar
+
+**Beispiel:**
+
+```hcl
+# Alte .NET-App als Binary
+task "legacy-app" {
+  driver = "exec"
+  artifact {
+    source = "https://storage/app.zip"
+  }
+}
+```
+
+**K8s-Problem**: Erfordert vollständige Containerisierung → höherer initialer Aufwand
+
+---
+
+#### 🚀 Batch/Data Processing (⭐⭐⭐⭐⭐ Nomad)
+
+**Warum Nomad?**
+
+- **Parametrisierte Jobs**: Native Unterstützung für Batch-Workloads
+- **Einfaches Scheduling**: Cron-ähnliche Syntax ohne CronJob-Komplexität
+- **Ressourcen-Effizienz**: Automatisches Cleanup nach Job-Completion
+- **Flexible Constraints**: CPU/Memory-Anforderungen pro Task
+
+**Beispiel:**
+
+```hcl
+job "data-pipeline" {
+  type = "batch"
+
+  parameterized {
+    payload       = "required"
+    meta_required = ["input_file"]
+  }
+
+  task "process" {
+    resources {
+      cpu    = 4000
+      memory = 8192
+    }
+  }
+}
+```
+
+**K8s-Problem**: CronJobs + Jobs sind komplexer, keine native Parametrisierung
+
+---
+
+#### 🌐 Edge Computing (⭐⭐⭐⭐ Nomad)
+
+**Warum Nomad?**
+
+- **Geringer Footprint**: Single Binary (~200MB) vs. K8s Control Plane
+- **Offline-Fähigkeit**: Clients arbeiten autonom bei Netzwerkausfall
+- **ARM-Support**: Native Unterstützung für Raspberry Pi, IoT-Devices
+- **Einfache Topologie**: Keine etcd-Cluster an Edge-Locations nötig
+
+**Architektur:**
+
+```
+Datacenter (Server) ──┐
+                      ├─→ Edge Location 1 (Client)
+                      ├─→ Edge Location 2 (Client)
+                      └─→ Edge Location N (Client)
+```
+
+**K8s-Problem**: Control Plane zu ressourcenhungrig für Edge-Devices
+
+---
+
+#### ☁️ Multi-Cloud (⭐⭐⭐⭐ Nomad)
+
+**Warum Nomad?**
+
+- **Cloud-Agnostisch**: Keine Vendor-Lock-in-Gefahr
+- **Einheitliche API**: Gleiche Job-Specs für AWS, Azure, GCP, On-Prem
+- **Einfaches Federation**: Consul Connect für Cross-Cloud-Networking
+- **Geringere Kosten**: Kein Managed-K8s-Overhead (EKS/AKS/GKE)
+
+**Beispiel:**
+
+```hcl
+job "multi-cloud-app" {
+  datacenters = ["aws-eu", "azure-eu", "on-prem"]
+
+  constraint {
+    attribute = "${meta.cloud}"
+    operator  = "set_contains_any"
+    value     = "aws,azure"
+  }
+}
+```
+
+**K8s-Problem**: Cluster-Federation komplex, Managed-Services teuer
+
+---
+
+#### 🏢 Startup (<10 Devs) (⭐⭐⭐⭐⭐ Nomad)
+
+**Warum Nomad?**
+
+- **Time-to-Market**: Cluster in <30min produktiv (vs. K8s: Tage)
+- **Geringer Ops-Overhead**: 1 DevOps reicht für Betrieb
+- **Lernkurve**: 2-3 Tage vs. 2-3 Monate für K8s
+- **Kosteneffizienz**: Weniger Ressourcen für Control Plane
+
+**ROI-Rechnung:**
+
+```
+Nomad Setup:  2 Tage  × 800€/Tag = 1.600€
+K8s Setup:    10 Tage × 800€/Tag = 8.000€
+Ersparnis: 6.400€ + schnelleres Go-Live
+```
+
+**K8s-Problem**: Overkill für kleine Teams, hoher initialer Invest
+
+---
+
+#### 🏭 Enterprise (>100 Devs) (⭐⭐ Nomad)
+
+**Warum Kubernetes?**
+
+- **Ecosystem-Reife**: Umfangreiches Tooling (Helm, Operators, Service Mesh)
+- **Talent-Pool**: Deutlich mehr K8s-Experten am Markt
+- **Enterprise-Support**: Alle Cloud-Provider bieten Managed-K8s
+- **Governance**: Bessere RBAC, Policy-Enforcement (OPA, Kyverno)
+
+**Nomad-Limitierung**: Kleineres Ecosystem, weniger Enterprise-Features
+
+---
+
+#### 🔒 Highly Regulated (⭐⭐ Nomad)
+
+**Warum Kubernetes?**
+
+- **Compliance-Zertifizierungen**: K8s hat mehr Audit-Reports (SOC2, ISO27001)
+- **Security-Tooling**: Falco, Trivy, OPA sind K8s-First
+- **Managed-Services**: Azure/AWS übernehmen Compliance-Burden
+- **Audit-Trails**: Bessere Integration mit SIEM-Systemen
+
+**Nomad-Limitierung**: Weniger Compliance-Dokumentation, kleineres Security-Ecosystem
+
 ### Ideale Nomad-Kunden
 
 **Profil:**
