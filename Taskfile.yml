@@ -47,7 +47,7 @@ tasks:
     desc: Connect to a Nomad server via SSH
     vars:
       SERVER: "{{.SERVER | default 1}}"
-      LB_IP: 51.137.124.4
+      LB_IP: 172.201.66.157
     cmds:
       - |
         echo "Connecting to Nomad server {{.SERVER}} at {{.LB_IP}}..."

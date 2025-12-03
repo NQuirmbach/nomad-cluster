@@ -53,10 +53,10 @@ jobs:
           ENV="${{ github.event.inputs.environment || 'dev' }}"
           PREFIX="nomad-cluster"
           RESOURCE_GROUP="rg-${PREFIX}-${ENV}"
-          
+
           echo "RESOURCE_GROUP=$RESOURCE_GROUP" >> $GITHUB_ENV
           echo "NOMAD_ENV=$ENV" >> $GITHUB_ENV
-          
+
           echo "Using environment: $ENV"
           echo "Resource Group: $RESOURCE_GROUP"
 
@@ -97,7 +97,7 @@ jobs:
         run: |
           # Get the job status
           nomad job status traefik
-          
+
           echo "## Traefik Deployed!" >> $GITHUB_STEP_SUMMARY
           echo "- Job: traefik" >> $GITHUB_STEP_SUMMARY
           echo "- Environment: $NOMAD_ENV" >> $GITHUB_STEP_SUMMARY
